@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.2] - 2025-05-20
+
+### Changed
+
+- Messaging connectors (Slack, Discord, Teams) now split messages by day for truly incremental sync. Past days are immutable so their checksums never change.
+
 ## [0.1.1] - 2025-05-20
 
 ### Added

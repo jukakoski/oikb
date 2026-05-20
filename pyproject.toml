@@ -1,7 +1,7 @@
 [project]
 name = "oikb"
-version = "0.1.1"
-description = "CLI tool for syncing content to Open WebUI Knowledge Bases"
+version = "0.1.2"
+description = "Sync anything to Open WebUI Knowledge Bases"
 readme = "README.md"
 authors = [
     { name = "Tim Baek", email = "tim@openwebui.com" }
