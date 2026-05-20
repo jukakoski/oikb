@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import click
 
 from oikb.client import OikbClient
-from oikb.connectors import BaseConnector
+from oikb.connectors import BaseConnector, ManifestEntry
 
 
 @dataclass
@@ -44,6 +45,31 @@ class SyncResult:
         return ", ".join(parts) if parts else "nothing to do"
 
 
+def build_manifest_filter(
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> Callable[[list[ManifestEntry]], list[ManifestEntry]] | None:
+    """Build a filter function from glob include/exclude patterns.
+
+    Returns None if no filtering is needed.
+    """
+    if not include and not exclude:
+        return None
+
+    def _filter(entries: list[ManifestEntry]) -> list[ManifestEntry]:
+        result = []
+        for entry in entries:
+            path = entry.display_path
+            if include and not any(fnmatch.fnmatch(path, p) for p in include):
+                continue
+            if exclude and any(fnmatch.fnmatch(path, p) for p in exclude):
+                continue
+            result.append(entry)
+        return result
+
+    return _filter
+
+
 def run_sync(
     client: OikbClient,
     connector: BaseConnector,
@@ -51,16 +77,18 @@ def run_sync(
     dry_run: bool = False,
     verbose: bool = False,
     quiet: bool = False,
+    manifest_filter: Callable[[list[ManifestEntry]], list[ManifestEntry]] | None = None,
 ) -> SyncResult:
     """Execute a full incremental sync.
 
     Steps:
       1. Build manifest from connector
-      2. POST manifest to /sync/diff
-      3. Cleanup stale files (delete before upload)
-      4. Create missing directories
-      5. Upload added + modified files
-      6. Return summary
+      2. Apply optional manifest filter
+      3. POST manifest to /sync/diff
+      4. Cleanup stale files (delete before upload)
+      5. Create missing directories
+      6. Upload added + modified files
+      7. Return summary
     """
     result = SyncResult()
     result.errors = []
@@ -73,6 +101,12 @@ def run_sync(
 
     if verbose:
         click.echo(f"  {len(manifest)} files found", err=True)
+
+    # ── 2. Apply filter ────────────────────────────────────────
+    if manifest_filter:
+        manifest = manifest_filter(manifest)
+        if verbose:
+            click.echo(f"  {len(manifest)} files after filtering", err=True)
 
     if not manifest:
         if not quiet:

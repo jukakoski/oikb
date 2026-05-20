@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2025-05-20
+
+### Added
+
+- `oikb daemon` command: long-lived scheduler with FastAPI server, /health and /history endpoints.
+- `oikb history` command: view sync history from local SQLite database.
+- Webhook support: /webhooks/github, /webhooks/gitlab, /webhooks/slack, /webhooks/confluence for real-time sync triggers.
+- `--json` output flag for `history` command.
+- 13 new connectors: Document360, Slab, Outline, Google Sites, Egnyte, Oracle Cloud Storage, ProductBoard, XenForo, Zulip, Gong, Fireflies, DokuWiki, ServiceNow. Total: 44 connectors.
+- Multi-KB routing: `routes` key in `.oikb.yaml` to route files by glob pattern to different KBs.
+- Selective sync filters: `filter.include` / `filter.exclude` glob patterns to narrow sync scope.
+- Daemon doubles as an OpenAPI tool server for Open WebUI (Settings → Connections → Tool Server).
+
+### Changed
+
+- FastAPI and uvicorn are now core dependencies.
+
 ## [0.1.3] - 2025-05-20
 
 ### Changed

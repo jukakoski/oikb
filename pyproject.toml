@@ -1,6 +1,6 @@
 [project]
 name = "oikb"
-version = "0.1.3"
+version = "0.2.0"
 description = "Sync anything to Open WebUI Knowledge Bases"
 readme = "README.md"
 authors = [
@@ -13,6 +13,8 @@ dependencies = [
     "httpx>=0.27",
     "pyyaml>=6.0",
     "watchdog>=4.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +48,19 @@ hubspot = ["httpx"]
 salesforce = ["httpx"]
 sharepoint = ["httpx"]
 web = ["beautifulsoup4>=4.12"]
+document360 = ["httpx"]
+slab = ["httpx"]
+outline = ["httpx"]
+gsites = ["google-api-python-client>=2.100", "google-auth>=2.25"]
+egnyte = ["httpx"]
+oracle = ["oci"]
+productboard = ["httpx"]
+xenforo = ["httpx"]
+zulip = ["httpx"]
+gong = ["httpx"]
+fireflies = ["httpx"]
+dokuwiki = []
+servicenow = ["httpx"]
 all = [
     "boto3>=1.34",
     "google-cloud-storage>=2.14",
@@ -54,6 +69,7 @@ all = [
     "google-api-python-client>=2.100",
     "google-auth>=2.25",
     "beautifulsoup4>=4.12",
+    "oci",
 ]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "respx>=0.21"]
 

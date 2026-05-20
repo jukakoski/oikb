@@ -1,6 +1,6 @@
 # 📚 oikb
 
-Keep your [Open WebUI](https://github.com/open-webui/open-webui) Knowledge Bases in sync. Point it at a local directory, a GitHub repo, a Confluence space, an S3 bucket, or any of 30+ supported sources. Only new and modified files are uploaded via incremental SHA-256 diffing.
+Keep your [Open WebUI](https://github.com/open-webui/open-webui) Knowledge Bases in sync. Point it at a local directory, a GitHub repo, a Confluence space, an S3 bucket, or any of 44 supported sources. Only new and modified files are uploaded via incremental SHA-256 diffing.
 
 > [!IMPORTANT]
 > Requires **Open WebUI 0.9.6+**
@@ -20,82 +20,50 @@ oikb sync ./docs --kb-id your-kb-id
 oikb watch ./docs --kb-id your-kb-id
 ```
 
-Or with Docker:
-
-```bash
-docker run --rm \
-  -e OPEN_WEBUI_URL=http://host.docker.internal:3000 \
-  -e OPEN_WEBUI_API_KEY=sk-your-key \
-  -v ./docs:/data \
-  ghcr.io/open-webui/oikb watch /data --kb-id your-kb-id
-```
-
 ## Commands
 
 | Command | Description |
 |---|---|
 | `oikb sync <source>` | Incremental sync to a Knowledge Base |
-| `oikb watch <source>` | Watch for changes and auto-sync |
+| `oikb watch <dir>` | Watch for changes and auto-sync |
+| `oikb daemon` | Long-lived scheduler with HTTP API |
 | `oikb diff <source>` | Preview what a sync would do |
+| `oikb history` | View sync history |
 | `oikb ls` | List files in a Knowledge Base |
 | `oikb status` | Show KB info and file count |
 | `oikb reset` | Delete all files in a Knowledge Base |
 | `oikb config` | Manage saved URL and API key |
 
-## 30+ Connectors
+## Daemon
 
-Beyond local directories, oikb can sync from remote sources using the same `oikb sync <source>` interface.
-
-| Category | Sources |
-|---|---|
-| **Code Repos** | GitHub, GitLab, Bitbucket |
-| **Cloud Storage** | S3, GCS, Azure Blob, Dropbox, R2, Google Drive, SharePoint |
-| **Wikis & KBs** | Confluence, Notion, BookStack, Discourse, GitBook, Guru |
-| **Ticketing** | Jira, Linear, Zendesk, Freshdesk, Asana, ClickUp, Airtable |
-| **Messaging** | Slack, Discord, Microsoft Teams, Gmail |
-| **Sales & CRM** | Salesforce, HubSpot |
-| **Web** | Website / Sitemap crawler |
+Run `oikb daemon` for production deployments. Reads `.oikb.yaml` and syncs each source on a schedule.
 
 ```bash
-oikb sync github:owner/repo --kb-id your-kb-id
-oikb sync confluence:ENG --kb-id your-kb-id
-oikb sync s3://bucket/prefix --kb-id your-kb-id
-oikb sync slack:C0123ABC --kb-id your-kb-id
+oikb daemon --port 8080
 ```
 
-Some connectors need an optional extra: `pip install oikb[gdrive]`, `pip install oikb[s3]`, or `pip install oikb[all]` for everything.
-
-## Configuration
-
-Resolved in order (highest priority wins):
-
-1. **CLI flags** (`--url`, `--token`)
-2. **Environment variables** (`OPEN_WEBUI_URL`, `OPEN_WEBUI_API_KEY`)
-3. **Config file** (`~/.config/oikb/config.yaml`)
-
-### Multi-source (`.oikb.yaml`)
-
-Define multiple sources in a single config file:
+Features:
+- **Scheduled sync** — configurable per-source intervals (`30m`, `1h`, `6h`)
+- **Webhooks** — instant sync on push via `/webhooks/github`, `/webhooks/gitlab`, `/webhooks/slack`, `/webhooks/confluence`
+- **Health checks** — `GET /health` for Docker/K8s readiness probes
+- **Sync history** — `GET /history` queryable log of all syncs
+- **On-demand sync** — `POST /sync/{source}` to trigger immediately
+- **OpenAPI tool server** — add `http://oikb:8080` as a Tool Server in Open WebUI (Settings → Connections) and let the LLM trigger syncs, check status, and query history
 
 ```yaml
+# .oikb.yaml
 sync:
-  - source: ./docs
-    kb-id: project-docs
-  - source: github:owner/wiki
+  - source: github:owner/repo
     kb-id: team-wiki
-    branch: main
+    interval: 1h
+    webhook: true
+
   - source: confluence:ENG
-    kb-id: eng-handbook
+    kb-id: handbook
+    interval: 6h
 ```
 
-```bash
-oikb sync              # Sync all entries
-oikb sync --name docs  # Sync a specific entry
-```
-
-## Docker Compose
-
-Run as a sidecar alongside Open WebUI:
+### Docker Compose
 
 ```yaml
 services:
@@ -110,11 +78,82 @@ services:
       - OPEN_WEBUI_URL=http://open-webui:8080
       - OPEN_WEBUI_API_KEY=${OPEN_WEBUI_API_KEY}
     volumes:
-      - ./docs:/data
-    command: watch /data --kb-id ${KB_ID}
+      - ./.oikb.yaml:/app/.oikb.yaml:ro
+    command: daemon
+    ports:
+      - "8080:8080"
     depends_on:
       - open-webui
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 30s
+      timeout: 5s
+```
+
+## 44 Connectors
+
+| Category | Sources |
+|---|---|
+| **Code Repos** | GitHub, GitLab, Bitbucket |
+| **Cloud Storage** | S3, GCS, Azure Blob, Dropbox, R2, Google Drive, SharePoint, Egnyte, Oracle Cloud |
+| **Wikis & KBs** | Confluence, Notion, BookStack, Discourse, GitBook, Guru, Outline, Slab, Document360, DokuWiki, Google Sites |
+| **Ticketing** | Jira, Linear, Zendesk, Freshdesk, Asana, ClickUp, Airtable, ServiceNow, ProductBoard |
+| **Messaging** | Slack, Discord, Microsoft Teams, Gmail, Zulip |
+| **Meetings** | Gong, Fireflies |
+| **Forums** | XenForo |
+| **Sales & CRM** | Salesforce, HubSpot |
+| **Web** | Website / Sitemap crawler |
+
+```bash
+oikb sync github:owner/repo --kb-id your-kb-id
+oikb sync confluence:ENG --kb-id your-kb-id
+oikb sync s3://bucket/prefix --kb-id your-kb-id
+oikb sync servicenow:incident --kb-id your-kb-id
+```
+
+Some connectors need an optional extra: `pip install oikb[gdrive]`, `pip install oikb[s3]`, or `pip install oikb[all]` for everything.
+
+## Multi-KB Routing
+
+Route files from a single source to different Knowledge Bases by glob pattern:
+
+```yaml
+sync:
+  - source: github:owner/repo
+    routes:
+      "docs/**/*.md": docs-kb
+      "src/**": code-kb
+```
+
+## Selective Sync Filters
+
+Narrow what gets synced with include/exclude globs:
+
+```yaml
+sync:
+  - source: github:owner/repo
+    kb-id: docs-only
+    filter:
+      include: ["docs/**/*.md", "*.txt"]
+      exclude: ["drafts/**"]
+```
+
+## Configuration
+
+Resolved in order (highest priority wins):
+
+1. **CLI flags** (`--url`, `--token`)
+2. **Environment variables** (`OPEN_WEBUI_URL`, `OPEN_WEBUI_API_KEY`)
+3. **Config file** (`~/.config/oikb/config.yaml`)
+
+## History
+
+```bash
+oikb history                    # Table view
+oikb history --json             # JSON output
+oikb history --errors           # Failed syncs only
+oikb history --clear --days 7   # Prune old entries
 ```
 
 ## GitHub Actions

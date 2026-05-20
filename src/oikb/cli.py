@@ -190,6 +190,75 @@ def _resolve_connector(source: str, branch: str | None = None, path: str | None 
         parsed = parse_r2_source(source)
         return R2Connector(bucket=parsed["bucket"], prefix=parsed.get("prefix"))
 
+    if source.startswith("document360:"):
+        from oikb.connectors.document360 import Document360Connector, parse_document360_source
+        parsed = parse_document360_source(source)
+        return Document360Connector(project_id=parsed["project_id"])
+
+    if source.startswith("slab:"):
+        from oikb.connectors.slab import SlabConnector, parse_slab_source
+        parsed = parse_slab_source(source)
+        return SlabConnector(org=parsed.get("org"))
+
+    if source.startswith("outline:"):
+        from oikb.connectors.outline import OutlineConnector, parse_outline_source
+        parsed = parse_outline_source(source)
+        return OutlineConnector(collection=parsed.get("collection"))
+
+    if source.startswith("gsites:"):
+        from oikb.connectors.google_sites import GoogleSitesConnector, parse_gsites_source
+        parsed = parse_gsites_source(source)
+        return GoogleSitesConnector(site_id=parsed["site_id"])
+
+    if source.startswith("egnyte:"):
+        from oikb.connectors.egnyte import EgnyteConnector, parse_egnyte_source
+        parsed = parse_egnyte_source(source)
+        return EgnyteConnector(path=parsed.get("path", "/"))
+
+    if source.startswith("oci://"):
+        from oikb.connectors.oracle_storage import OracleStorageConnector, parse_oracle_source
+        parsed = parse_oracle_source(source)
+        return OracleStorageConnector(bucket=parsed["bucket"], prefix=parsed.get("prefix"))
+
+    if source.startswith("productboard:"):
+        from oikb.connectors.productboard import ProductBoardConnector
+        return ProductBoardConnector()
+
+    if source.startswith("xenforo:"):
+        from oikb.connectors.xenforo import XenForoConnector, parse_xenforo_source
+        parsed = parse_xenforo_source(source)
+        return XenForoConnector(forum_id=parsed.get("forum_id"))
+
+    if source.startswith("zulip:"):
+        from oikb.connectors.zulip import ZulipConnector, parse_zulip_source
+        parsed = parse_zulip_source(source)
+        return ZulipConnector(stream=parsed.get("stream"))
+
+    if source.startswith("gong:"):
+        from oikb.connectors.gong import GongConnector
+        return GongConnector()
+
+    if source.startswith("fireflies:"):
+        from oikb.connectors.fireflies import FirefliesConnector
+        return FirefliesConnector()
+
+    if source.startswith("dokuwiki:"):
+        from oikb.connectors.dokuwiki import DokuWikiConnector, parse_dokuwiki_source
+        parsed = parse_dokuwiki_source(source)
+        return DokuWikiConnector(namespace=parsed.get("namespace"))
+
+    if source.startswith("servicenow:"):
+        from oikb.connectors.servicenow import ServiceNowConnector, parse_servicenow_source
+        parsed = parse_servicenow_source(source)
+        fields = parsed["fields"].split(",") if parsed.get("fields") else None
+        return ServiceNowConnector(
+            table=parsed.get("table", "incident"),
+            query=parsed.get("query"),
+            fields=fields,
+            fmt=parsed.get("format", "markdown"),
+            limit=int(parsed.get("limit", "1000")),
+        )
+
     # Default: local filesystem.
     from oikb.connectors.filesystem import FilesystemConnector
     return FilesystemConnector(source)
@@ -266,34 +335,72 @@ def sync(
             entry_kb = entry.get("kb-id")
             entry_branch = entry.get("branch")
             entry_path = entry.get("path")
+            entry_routes = entry.get("routes")
+            entry_filter = entry.get("filter", {})
 
-            if not entry_source or not entry_kb:
-                click.echo(click.style(f"Skipping invalid entry: {entry}", fg="yellow"), err=True)
+            if not entry_source or (not entry_kb and not entry_routes):
+                click.echo(click.style(f"Skipping invalid entry (needs source + kb-id or routes): {entry}", fg="yellow"), err=True)
                 continue
-
-            if not quiet:
-                click.echo(f"\n{'─' * 40}")
-                click.echo(f"Syncing: {entry_source} → {entry_kb}")
 
             try:
                 connector = _resolve_connector(entry_source, entry_branch, entry_path)
                 client = _make_client(url, token)
-                result = run_sync(
-                    client=client,
-                    connector=connector,
-                    kb_id=entry_kb,
-                    dry_run=dry_run,
-                    verbose=verbose,
-                    quiet=quiet,
-                )
+
+                # ── Multi-KB routing mode ──
+                if entry_routes:
+                    from oikb.sync import build_manifest_filter
+                    for pattern, route_kb in entry_routes.items():
+                        if not quiet:
+                            click.echo(f"\n{'─' * 40}")
+                            click.echo(f"Syncing: {entry_source} [{pattern}] → {route_kb}")
+                        mf = build_manifest_filter(include=[pattern])
+                        result = run_sync(
+                            client=client,
+                            connector=connector,
+                            kb_id=route_kb,
+                            dry_run=dry_run,
+                            verbose=verbose,
+                            quiet=quiet,
+                            manifest_filter=mf,
+                        )
+                        if not quiet:
+                            prefix = "Dry run" if dry_run else "Done"
+                            click.echo(f"  {prefix}: {result.summary()}")
+                        if result.errors:
+                            has_errors = True
+
+                # ── Standard single-KB mode ──
+                else:
+                    if not quiet:
+                        click.echo(f"\n{'─' * 40}")
+                        click.echo(f"Syncing: {entry_source} → {entry_kb}")
+
+                    mf = None
+                    if entry_filter.get("include") or entry_filter.get("exclude"):
+                        from oikb.sync import build_manifest_filter
+                        mf = build_manifest_filter(
+                            include=entry_filter.get("include"),
+                            exclude=entry_filter.get("exclude"),
+                        )
+
+                    result = run_sync(
+                        client=client,
+                        connector=connector,
+                        kb_id=entry_kb,
+                        dry_run=dry_run,
+                        verbose=verbose,
+                        quiet=quiet,
+                        manifest_filter=mf,
+                    )
+
+                    if not quiet:
+                        prefix = "Dry run" if dry_run else "Done"
+                        click.echo(f"  {prefix}: {result.summary()}")
+
+                    if result.errors:
+                        has_errors = True
+
                 client.close()
-
-                if not quiet:
-                    prefix = "Dry run" if dry_run else "Done"
-                    click.echo(f"  {prefix}: {result.summary()}")
-
-                if result.errors:
-                    has_errors = True
 
             except Exception as e:
                 click.echo(click.style(f"  Failed: {e}", fg="red"), err=True)
@@ -617,6 +724,97 @@ def config_get(key: str | None):
         click.echo("(not set)")
 
 
+# ── daemon ──────────────────────────────────────────────────────
+
+@cli.command()
+@click.option("--port", default=8080, type=int, help="HTTP port for healthcheck and API (default: 8080).")
+@click.option("--no-server", is_flag=True, help="Run scheduler only, no HTTP server.")
+@click.option("--config", "config_file", default=None, type=click.Path(), help="Path to .oikb.yaml (default: ./.oikb.yaml).")
+def daemon(port: int, no_server: bool, config_file: str | None):
+    """Run as a long-lived daemon with scheduled sync.
+
+    Reads .oikb.yaml and syncs each source on its configured interval.
+    Exposes /health, /history, and /sync endpoints.
+    """
+    if config_file:
+        import yaml
+        with open(config_file) as f:
+            data = yaml.safe_load(f)
+        entries = data.get("sync", []) if data else []
+    else:
+        entries = _load_oikb_yaml()
+
+    if not entries:
+        click.echo(click.style("No sync entries found. Create a .oikb.yaml file.", fg="red"), err=True)
+        sys.exit(1)
+
+    # Validate entries.
+    for entry in entries:
+        if not entry.get("source") or not entry.get("kb-id"):
+            click.echo(click.style(f"Invalid entry (needs source + kb-id): {entry}", fg="red"), err=True)
+            sys.exit(1)
+
+    from oikb.daemon import start_daemon
+    start_daemon(entries=entries, port=port, no_server=no_server)
+
+
+# ── history ─────────────────────────────────────────────────────
+
+@cli.command()
+@click.option("--limit", default=20, type=int, help="Number of entries to show.")
+@click.option("--kb-id", default=None, help="Filter by Knowledge Base ID.")
+@click.option("--errors", is_flag=True, help="Show only failed syncs.")
+@click.option("--clear", is_flag=True, help="Clear old entries.")
+@click.option("--days", default=30, type=int, help="Clear entries older than N days (with --clear).")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def history(limit: int, kb_id: str | None, errors: bool, clear: bool, days: int, as_json: bool):
+    """View sync history."""
+    import json as json_mod
+    from oikb.history import SyncHistory
+
+    hist = SyncHistory()
+
+    if clear:
+        count = hist.clear(older_than_days=days)
+        click.echo(f"Cleared {count} entries older than {days} days.")
+        hist.close()
+        return
+
+    entries = hist.query(limit=limit, kb_id=kb_id, errors_only=errors)
+    hist.close()
+
+    if as_json:
+        click.echo(json_mod.dumps(entries, indent=2, default=str))
+        return
+
+    if not entries:
+        click.echo("No sync history.")
+        return
+
+    # Table output.
+    click.echo(f"{'SOURCE':<30} {'KB-ID':<20} {'STATUS':<10} {'DURATION':<10} {'FILES':<12} {'TIME'}")
+    click.echo("-" * 100)
+    for e in entries:
+        source = (e["source"] or "")[:28]
+        kb = (e["kb_id"] or "")[:18]
+        status = e["status"]
+        duration = f"{e.get('duration_ms', 0)}ms" if e.get("duration_ms") else "--"
+        added = e.get("files_added", 0)
+        modified = e.get("files_modified", 0)
+        deleted = e.get("files_deleted", 0)
+        files = f"+{added} ~{modified} -{deleted}"
+        ago = _time_ago(e.get("started_at", 0))
+
+        color = "green" if status == "success" else "red" if status == "error" else "yellow"
+        click.echo(
+            f"{source:<30} {kb:<20} "
+            + click.style(f"{status:<10}", fg=color)
+            + f"{duration:<10} {files:<12} {ago}"
+        )
+        if status == "error" and e.get("error_message"):
+            click.echo(click.style(f"  Error: {e['error_message']}", fg="red"))
+
+
 # ── Helpers ─────────────────────────────────────────────────────
 
 def _format_size(size: int) -> str:
@@ -633,3 +831,16 @@ def _timestamp() -> str:
     from datetime import datetime
 
     return datetime.now().strftime("%H:%M:%S")
+
+
+def _time_ago(ts: float) -> str:
+    """Human-readable time since a Unix timestamp."""
+    import time
+    delta = int(time.time() - ts)
+    if delta < 60:
+        return f"{delta}s ago"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86400:
+        return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
