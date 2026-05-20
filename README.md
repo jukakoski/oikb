@@ -80,12 +80,12 @@ Define multiple sources in a single config file:
 ```yaml
 sync:
   - source: ./docs
-    kb: project-docs
+    kb-id: project-docs
   - source: github:owner/wiki
-    kb: team-wiki
+    kb-id: team-wiki
     branch: main
   - source: confluence:ENG
-    kb: eng-handbook
+    kb-id: eng-handbook
 ```
 
 ```bash

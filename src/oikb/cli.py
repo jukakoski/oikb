@@ -221,7 +221,7 @@ def _load_oikb_yaml() -> list[dict] | None:
 @click.option("--path", "source_path", default=None, help="Subdirectory within the source.")
 @click.option("--dry-run", is_flag=True, help="Preview changes without uploading.")
 @click.option("-v", "--verbose", is_flag=True, help="Show detailed progress.")
-@click.option("--name", default=None, help="Target a specific entry in .oikb.yaml by name/kb.")
+@click.option("--name", default=None, help="Target a specific entry in .oikb.yaml by name/kb-id.")
 @click.pass_context
 def sync(
     ctx: click.Context,
@@ -255,7 +255,7 @@ def sync(
 
         # Filter by --name if specified.
         if name:
-            entries = [e for e in entries if e.get("kb") == name or e.get("source") == name]
+            entries = [e for e in entries if e.get("kb-id") == name or e.get("source") == name]
             if not entries:
                 click.echo(click.style(f"No entry matching '{name}' in .oikb.yaml", fg="red"), err=True)
                 sys.exit(1)
@@ -263,7 +263,7 @@ def sync(
         has_errors = False
         for entry in entries:
             entry_source = entry.get("source")
-            entry_kb = entry.get("kb")
+            entry_kb = entry.get("kb-id")
             entry_branch = entry.get("branch")
             entry_path = entry.get("path")
 
