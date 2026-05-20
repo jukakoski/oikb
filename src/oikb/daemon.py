@@ -3,19 +3,37 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import os
 import signal
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import click
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from oikb.env import API_KEY
 from oikb.history import SyncHistory
 
 log = logging.getLogger(__name__)
+
+# ── Auth dependency ──────────────────────────────────────────────
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def verify_api_key(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    if not API_KEY:
+        return
+    if not credentials or not hmac.compare_digest(credentials.credentials, API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
 
 app = FastAPI(
     title="oikb",
@@ -68,6 +86,7 @@ async def ready():
     "/history",
     operation_id="get_sync_history",
     summary="Query sync history log",
+    dependencies=[Depends(verify_api_key)],
 )
 async def history_endpoint(
     limit: int = 50,
@@ -87,6 +106,7 @@ async def history_endpoint(
     "/sync/{source}",
     operation_id="trigger_sync",
     summary="Trigger an immediate sync for a source",
+    dependencies=[Depends(verify_api_key)],
 )
 async def trigger_sync(source: str):
     """Triggers an immediate sync for the given source or Knowledge Base ID. The sync runs asynchronously in the background. Use get_sync_status to check progress."""
@@ -251,6 +271,7 @@ def start_daemon(
 
         click.echo(f"oikb daemon listening on port {port}")
         click.echo(f"  {len(entries)} source(s) configured")
+        click.echo(f"  Auth: {'OIKB_API_KEY set' if API_KEY else 'disabled (set OIKB_API_KEY to enable)'}")
         if webhook_entries:
             click.echo(f"  {len(webhook_entries)} webhook-enabled source(s)")
         click.echo(f"  GET  http://localhost:{port}/health")
