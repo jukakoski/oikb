@@ -24,10 +24,10 @@ def cli(ctx: click.Context, quiet: bool):
 # ── Common options ──────────────────────────────────────────────
 
 def common_options(f):
-    """Shared --url, --token, --kb options."""
+    """Shared --url, --token, --kb-id options."""
     f = click.option("--url", default=None, envvar="OPEN_WEBUI_URL", help="Open WebUI base URL.")(f)
     f = click.option("--token", default=None, envvar="OPEN_WEBUI_API_KEY", help="API key.")(f)
-    f = click.option("--kb", default=None, help="Knowledge Base ID.")(f)
+    f = click.option("--kb-id", "kb", default=None, help="Knowledge Base ID.")(f)
     return f
 
 
@@ -42,36 +42,156 @@ def _make_client(url: str | None, token: str | None):
 
 
 def _resolve_connector(source: str, branch: str | None = None, path: str | None = None):
-    """Resolve a source string to the appropriate connector.
-
-    Supports:
-      - Local paths: ./docs, /absolute/path, relative/path
-      - GitHub: github:owner/repo[/subdir]
-      - S3: s3://bucket[/prefix]
-    """
+    """Resolve a source string to the appropriate connector."""
     if source.startswith("github:"):
         from oikb.connectors.github import GitHubConnector, parse_github_source
-
         parsed = parse_github_source(source)
-        return GitHubConnector(
-            owner=parsed["owner"],
-            repo=parsed["repo"],
-            branch=branch,
-            path=path or parsed.get("path"),
-        )
+        return GitHubConnector(owner=parsed["owner"], repo=parsed["repo"], branch=branch, path=path or parsed.get("path"))
+
+    if source.startswith("gitlab:"):
+        from oikb.connectors.gitlab import GitLabConnector, parse_gitlab_source
+        parsed = parse_gitlab_source(source)
+        return GitLabConnector(owner=parsed["owner"], repo=parsed["repo"], branch=branch, path=path or parsed.get("path"))
 
     if source.startswith("s3://"):
         from oikb.connectors.s3 import S3Connector, parse_s3_source
-
         parsed = parse_s3_source(source)
-        return S3Connector(
-            bucket=parsed["bucket"],
-            prefix=path or parsed.get("prefix"),
-        )
+        return S3Connector(bucket=parsed["bucket"], prefix=path or parsed.get("prefix"))
+
+    if source.startswith("gs://"):
+        from oikb.connectors.gcs import GCSConnector, parse_gcs_source
+        parsed = parse_gcs_source(source)
+        return GCSConnector(bucket=parsed["bucket"], prefix=path or parsed.get("prefix"))
+
+    if source.startswith("az://"):
+        from oikb.connectors.azure_blob import AzureBlobConnector, parse_azure_source
+        parsed = parse_azure_source(source)
+        return AzureBlobConnector(container=parsed["container"], prefix=path or parsed.get("prefix"))
+
+    if source.startswith("dropbox:"):
+        from oikb.connectors.dropbox import DropboxConnector, parse_dropbox_source
+        parsed = parse_dropbox_source(source)
+        return DropboxConnector(path=parsed["path"])
+
+    if source.startswith("gdrive:"):
+        from oikb.connectors.gdrive import GDriveConnector, parse_gdrive_source
+        parsed = parse_gdrive_source(source)
+        return GDriveConnector(folder_id=parsed["folder_id"])
+
+    if source.startswith("confluence:"):
+        from oikb.connectors.confluence import ConfluenceConnector, parse_confluence_source
+        parsed = parse_confluence_source(source)
+        return ConfluenceConnector(space_key=parsed["space_key"], base_url=parsed.get("base_url"))
+
+    if source.startswith("notion:"):
+        from oikb.connectors.notion import NotionConnector, parse_notion_source
+        parsed = parse_notion_source(source)
+        return NotionConnector(root_id=parsed["root_id"])
+
+    if source.startswith("slack:"):
+        from oikb.connectors.slack import SlackConnector, parse_slack_source
+        parsed = parse_slack_source(source)
+        return SlackConnector(channel_id=parsed["channel_id"])
+
+    if source.startswith("jira:"):
+        from oikb.connectors.jira import JiraConnector, parse_jira_source
+        parsed = parse_jira_source(source)
+        return JiraConnector(project_key=parsed["project_key"])
+
+    if source.startswith("sharepoint:"):
+        from oikb.connectors.sharepoint import SharePointConnector, parse_sharepoint_source
+        parsed = parse_sharepoint_source(source)
+        return SharePointConnector(site=parsed["site"], library=parsed.get("library", "Documents"))
+
+    if source.startswith("web:"):
+        from oikb.connectors.web import WebConnector, parse_web_source
+        parsed = parse_web_source(source)
+        return WebConnector(url=parsed["url"])
+
+    if source.startswith("bitbucket:"):
+        from oikb.connectors.bitbucket import BitbucketConnector, parse_bitbucket_source
+        parsed = parse_bitbucket_source(source)
+        return BitbucketConnector(owner=parsed["owner"], repo=parsed["repo"], branch=branch, path=path or parsed.get("path"))
+
+    if source.startswith("discord:"):
+        from oikb.connectors.discord import DiscordConnector, parse_discord_source
+        parsed = parse_discord_source(source)
+        return DiscordConnector(channel_id=parsed["channel_id"])
+
+    if source.startswith("gmail:"):
+        from oikb.connectors.gmail import GmailConnector, parse_gmail_source
+        parsed = parse_gmail_source(source)
+        return GmailConnector(user_email=parsed["user_email"], query=parsed.get("query", ""))
+
+    if source.startswith("teams:"):
+        from oikb.connectors.teams import TeamsConnector, parse_teams_source
+        parsed = parse_teams_source(source)
+        return TeamsConnector(team_id=parsed["team_id"], channel_id=parsed["channel_id"])
+
+    if source.startswith("linear:"):
+        from oikb.connectors.linear import LinearConnector, parse_linear_source
+        parsed = parse_linear_source(source)
+        return LinearConnector(team_key=parsed["team_key"])
+
+    if source.startswith("zendesk:"):
+        from oikb.connectors.zendesk import ZendeskConnector, parse_zendesk_source
+        parsed = parse_zendesk_source(source)
+        return ZendeskConnector(subdomain=parsed.get("subdomain"))
+
+    if source.startswith("hubspot:"):
+        from oikb.connectors.hubspot import HubSpotConnector
+        return HubSpotConnector()
+
+    if source.startswith("salesforce:"):
+        from oikb.connectors.salesforce import SalesforceConnector
+        return SalesforceConnector()
+
+    if source.startswith("bookstack:"):
+        from oikb.connectors.bookstack import BookStackConnector
+        return BookStackConnector()
+
+    if source.startswith("discourse:"):
+        from oikb.connectors.discourse import DiscourseConnector, parse_discourse_source
+        parsed = parse_discourse_source(source)
+        return DiscourseConnector(category=parsed.get("category"))
+
+    if source.startswith("airtable:"):
+        from oikb.connectors.airtable import AirtableConnector, parse_airtable_source
+        parsed = parse_airtable_source(source)
+        return AirtableConnector(base_id=parsed["base_id"], table_name=parsed.get("table_name", "Table 1"))
+
+    if source.startswith("freshdesk:"):
+        from oikb.connectors.freshdesk import FreshdeskConnector, parse_freshdesk_source
+        parsed = parse_freshdesk_source(source)
+        return FreshdeskConnector(domain=parsed.get("domain"))
+
+    if source.startswith("asana:"):
+        from oikb.connectors.asana import AsanaConnector, parse_asana_source
+        parsed = parse_asana_source(source)
+        return AsanaConnector(project_id=parsed["project_id"])
+
+    if source.startswith("clickup:"):
+        from oikb.connectors.clickup import ClickUpConnector, parse_clickup_source
+        parsed = parse_clickup_source(source)
+        return ClickUpConnector(space_id=parsed["space_id"])
+
+    if source.startswith("gitbook:"):
+        from oikb.connectors.gitbook import GitBookConnector, parse_gitbook_source
+        parsed = parse_gitbook_source(source)
+        return GitBookConnector(space_id=parsed["space_id"])
+
+    if source.startswith("guru:"):
+        from oikb.connectors.guru import GuruConnector, parse_guru_source
+        parsed = parse_guru_source(source)
+        return GuruConnector(collection=parsed.get("collection"))
+
+    if source.startswith("r2://"):
+        from oikb.connectors.r2 import R2Connector, parse_r2_source
+        parsed = parse_r2_source(source)
+        return R2Connector(bucket=parsed["bucket"], prefix=parsed.get("prefix"))
 
     # Default: local filesystem.
     from oikb.connectors.filesystem import FilesystemConnector
-
     return FilesystemConnector(source)
 
 
@@ -185,7 +305,7 @@ def sync(
 
     # ── Single source mode ──
     if not kb:
-        click.echo(click.style("--kb is required when syncing a single source.", fg="red"), err=True)
+        click.echo(click.style("--kb-id is required when syncing a single source.", fg="red"), err=True)
         sys.exit(1)
 
     try:
@@ -247,7 +367,7 @@ def diff(
 ):
     """Preview what a sync would do (alias for sync --dry-run)."""
     if not kb:
-        click.echo(click.style("--kb is required.", fg="red"), err=True)
+        click.echo(click.style("--kb-id is required.", fg="red"), err=True)
         sys.exit(1)
 
     from oikb.sync import run_sync
@@ -303,7 +423,7 @@ def watch(
     Runs continuously until interrupted (Ctrl+C).
     """
     if not kb:
-        click.echo(click.style("--kb is required.", fg="red"), err=True)
+        click.echo(click.style("--kb-id is required.", fg="red"), err=True)
         sys.exit(1)
 
     quiet = ctx.obj.get("quiet", False)
@@ -364,7 +484,7 @@ def watch(
 def reset(url: str | None, token: str | None, kb: str | None, keep_directories: bool):
     """Reset a Knowledge Base (delete all files)."""
     if not kb:
-        click.echo(click.style("--kb is required.", fg="red"), err=True)
+        click.echo(click.style("--kb-id is required.", fg="red"), err=True)
         sys.exit(1)
 
     try:
@@ -391,7 +511,7 @@ def reset(url: str | None, token: str | None, kb: str | None, keep_directories: 
 def ls(url: str | None, token: str | None, kb: str | None):
     """List files in a Knowledge Base."""
     if not kb:
-        click.echo(click.style("--kb is required.", fg="red"), err=True)
+        click.echo(click.style("--kb-id is required.", fg="red"), err=True)
         sys.exit(1)
 
     try:
@@ -427,7 +547,7 @@ def ls(url: str | None, token: str | None, kb: str | None):
 def status(url: str | None, token: str | None, kb: str | None):
     """Show Knowledge Base info and file count."""
     if not kb:
-        click.echo(click.style("--kb is required.", fg="red"), err=True)
+        click.echo(click.style("--kb-id is required.", fg="red"), err=True)
         sys.exit(1)
 
     try:
