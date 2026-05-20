@@ -96,7 +96,14 @@ def _resolve_connector(source: str, branch: str | None = None, path: str | None 
     if source.startswith("jira:"):
         from oikb.connectors.jira import JiraConnector, parse_jira_source
         parsed = parse_jira_source(source)
-        return JiraConnector(project_key=parsed["project_key"])
+        fields = parsed["fields"].split(",") if parsed.get("fields") else None
+        return JiraConnector(
+            project_key=parsed["project_key"],
+            jql=parsed.get("jql"),
+            fields=fields,
+            fmt=parsed.get("format", "markdown"),
+            limit=int(parsed["limit"]) if parsed.get("limit") else None,
+        )
 
     if source.startswith("sharepoint:"):
         from oikb.connectors.sharepoint import SharePointConnector, parse_sharepoint_source
