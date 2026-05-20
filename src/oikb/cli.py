@@ -282,10 +282,12 @@ def _load_oikb_yaml() -> list[dict] | None:
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
 
-    if not data or "sync" not in data:
+    if not data:
         return None
 
-    return data["sync"]
+    # Prefer sources: (new), fall back to sync: (legacy).
+    entries = data.get("sources") or data.get("sync")
+    return entries or None
 
 
 # ── sync ────────────────────────────────────────────────────────
@@ -747,7 +749,7 @@ def daemon(port: int, no_server: bool, config_file: str | None):
         import yaml
         with open(config_file) as f:
             data = yaml.safe_load(f)
-        entries = data.get("sync", []) if data else []
+        entries = (data.get("sources") or data.get("sync", [])) if data else []
     else:
         entries = _load_oikb_yaml()
 

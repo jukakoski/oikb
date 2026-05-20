@@ -52,7 +52,7 @@ Features:
 
 ```yaml
 # .oikb.yaml
-sync:
+sources:
   - source: github:owner/repo
     kb-id: team-wiki
     interval: 1h
@@ -119,7 +119,7 @@ Some connectors need an optional extra: `pip install oikb[gdrive]`, `pip install
 Route files from a single source to different Knowledge Bases by glob pattern:
 
 ```yaml
-sync:
+sources:
   - source: github:owner/repo
     routes:
       "docs/**/*.md": docs-kb
@@ -131,7 +131,7 @@ sync:
 Narrow what gets synced with include/exclude globs:
 
 ```yaml
-sync:
+sources:
   - source: github:owner/repo
     kb-id: docs-only
     filter:
