@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1] - 2025-05-20
+
+### Added
+
+- API key authentication for daemon endpoints (`OIKB_API_KEY` env var, Docker secrets `_FILE` supported).
+- Configurable fields, format, and query filters for Jira and ServiceNow connectors.
+
+### Changed
+
+- `.oikb.yaml` top-level key renamed from `sync:` to `sources:` (backward compatible).
+- `/health` endpoints remain public; `/history` and `/sync` require auth when key is set.
+
 ## [0.2.0] - 2025-05-20
 
 ### Added
