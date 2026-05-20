@@ -6,6 +6,9 @@ A CLI tool that syncs content to [Open WebUI](https://github.com/open-webui/open
 
 Manually uploading files to Knowledge Bases is tedious. oikb automates it with incremental SHA-256 diffing, so only new and modified files are uploaded. Directory structure is mirrored automatically. Run it once, run it in CI, or leave it watching for changes.
 
+> [!IMPORTANT]
+> Requires **Open WebUI 0.9.6+** (uses the `/sync/diff` and `/sync/cleanup` API endpoints).
+
 ## Getting Started
 
 ### Docker (recommended)
