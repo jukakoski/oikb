@@ -47,6 +47,7 @@ Features:
 - **Scheduled sync** — configurable per-source intervals (`30m`, `1h`, `6h`)
 - **Webhooks** — instant sync on push via `/webhooks/github`, `/webhooks/gitlab`, `/webhooks/slack`, `/webhooks/confluence`
 - **Health checks** — `GET /health` for Docker/K8s readiness probes
+- **Prometheus metrics** — `GET /metrics` exports sync counters, duration histograms, and error rates
 - **Sync history** — `GET /history` queryable log of all syncs
 - **On-demand sync** — `POST /sync/{identifier}` trigger by `name` or `kb-id`
 - **API key auth** — set `OIKB_API_KEY` to secure endpoints (Docker secrets `_FILE` supported)

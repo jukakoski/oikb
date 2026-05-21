@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.6] - 2025-05-21
+
+### Added
+
+- Prometheus metrics endpoint (`GET /metrics`) on the daemon — exports `oikb_sync_total`, `oikb_sync_duration_seconds`, `oikb_files_uploaded_total`, `oikb_files_deleted_total`, `oikb_sync_errors_total`, and `oikb_info` build metadata. All counters labeled by source.
+- `prometheus-client>=0.20` added as a core dependency.
+
 ## [0.2.5] - 2025-05-21
 
 ### Added

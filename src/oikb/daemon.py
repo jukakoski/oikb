@@ -16,8 +16,10 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from oikb import __version__
 from oikb.env import API_KEY
 from oikb.history import SyncHistory
+from oikb.metrics import record_sync, set_build_info
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.2.5",
+    version="0.2.6",
 )
 
 # Runtime state populated by start_daemon().
@@ -164,10 +166,12 @@ async def _run_entry(entry: dict) -> None:
         )
         client.close()
 
-        duration_ms = int((time.time() - started_at) * 1000)
+        duration_s = time.time() - started_at
+        duration_ms = int(duration_s * 1000)
+        status = "success" if not result.errors else "partial"
 
         _scheduler_state[source] = {
-            "status": "success" if not result.errors else "partial",
+            "status": status,
             "last_sync": time.time(),
             "duration_ms": duration_ms,
             "files_added": result.added,
@@ -176,6 +180,15 @@ async def _run_entry(entry: dict) -> None:
             "unmodified": result.unmodified,
             "errors": result.errors or [],
         }
+
+        record_sync(
+            source=source,
+            status=status,
+            duration_seconds=duration_s,
+            files_added=result.added,
+            files_modified=result.modified,
+            files_deleted=result.deleted,
+        )
 
         if _history:
             await asyncio.to_thread(
@@ -200,6 +213,11 @@ async def _run_entry(entry: dict) -> None:
             "last_sync": time.time(),
             "error": str(e),
         }
+        record_sync(
+            source=source,
+            status="error",
+            duration_seconds=time.time() - started_at,
+        )
         if _history:
             await asyncio.to_thread(
                 _history.log,
@@ -260,6 +278,12 @@ def start_daemon(
     global _history, _entries
     _entries = entries
     _history = SyncHistory()
+    set_build_info(__version__)
+
+    # Mount Prometheus metrics endpoint.
+    from prometheus_client import make_asgi_app
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
 
     # Mount webhook routes.
     from oikb.webhooks import router as webhook_router, configure as configure_webhooks
@@ -287,6 +311,7 @@ def start_daemon(
         if webhook_entries:
             click.echo(f"  {len(webhook_entries)} webhook-enabled source(s)")
         click.echo(f"  GET  http://localhost:{port}/health")
+        click.echo(f"  GET  http://localhost:{port}/metrics")
         click.echo(f"  GET  http://localhost:{port}/history")
         click.echo(f"  POST http://localhost:{port}/sync/{{kb_id}}")
         if webhook_entries:
