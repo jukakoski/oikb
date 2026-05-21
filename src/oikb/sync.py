@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import fnmatch
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable
 
 import click
+import httpx
 
 from oikb.client import OikbClient
 from oikb.connectors import BaseConnector, ManifestEntry
@@ -78,6 +81,7 @@ def run_sync(
     verbose: bool = False,
     quiet: bool = False,
     manifest_filter: Callable[[list[ManifestEntry]], list[ManifestEntry]] | None = None,
+    concurrency: int = 1,
 ) -> SyncResult:
     """Execute a full incremental sync.
 
@@ -88,11 +92,31 @@ def run_sync(
       4. Cleanup stale files (delete before upload)
       5. Create missing directories
       6. Upload added + modified files
-      7. Return summary
     """
     result = SyncResult()
     result.errors = []
 
+    try:
+        return _run_sync_inner(
+            client, connector, kb_id, dry_run, verbose, quiet,
+            manifest_filter, concurrency, result,
+        )
+    finally:
+        connector.close()
+
+
+def _run_sync_inner(
+    client: OikbClient,
+    connector: BaseConnector,
+    kb_id: str,
+    dry_run: bool,
+    verbose: bool,
+    quiet: bool,
+    manifest_filter: Callable[[list[ManifestEntry]], list[ManifestEntry]] | None,
+    concurrency: int,
+    result: SyncResult,
+) -> SyncResult:
+    """Inner sync logic, separated for clean connector cleanup."""
     # ── 1. Build manifest ──────────────────────────────────────
     if verbose:
         click.echo("Scanning source...", err=True)
@@ -113,7 +137,7 @@ def run_sync(
             click.echo("Source is empty — nothing to sync.", err=True)
         return result
 
-    # ── 2. Compute diff ────────────────────────────────────────
+    # ── 3. Compute diff ────────────────────────────────────────
     if verbose:
         click.echo("Computing diff...", err=True)
 
@@ -168,7 +192,7 @@ def run_sync(
     if not added and not modified and not deleted and not mkdir and not rmdir:
         return result
 
-    # ── 3. Cleanup stale files ─────────────────────────────────
+    # ── 4. Cleanup stale files ─────────────────────────────────
     stale_file_ids = [
         *[d["file_id"] for d in deleted],
         *[m["stale_file_id"] for m in modified],
@@ -184,7 +208,7 @@ def run_sync(
         result.deleted = len(deleted)
         result.dirs_removed = len(rmdir)
 
-    # ── 4. Create missing directories ──────────────────────────
+    # ── 5. Create missing directories ──────────────────────────
     for dir_path in mkdir:
         segments = dir_path.split("/")
         name = segments[-1]
@@ -198,8 +222,7 @@ def run_sync(
         directory_map[dir_path] = resp.get("id", "")
         result.dirs_created += 1
 
-    # ── 5. Upload files ────────────────────────────────────────
-    # Build a lookup from manifest entries for fast access.
+    # ── 6. Upload files ────────────────────────────────────────
     manifest_by_key = {(e.path, e.filename): e for e in manifest}
 
     files_to_upload = [
@@ -207,7 +230,8 @@ def run_sync(
         *[(m, "modified") for m in modified],
     ]
 
-    for i, (entry, change_type) in enumerate(files_to_upload, 1):
+    def _upload_one(i: int, entry: dict, change_type: str) -> str | None:
+        """Upload a single file with retry. Returns error string or None."""
         filename = entry["filename"]
         path = entry.get("path", "")
         display = f"{path}/{filename}" if path else filename
@@ -217,32 +241,58 @@ def run_sync(
 
         manifest_entry = manifest_by_key.get((path, filename))
         if not manifest_entry:
-            result.errors.append(f"File not in manifest: {display}")
-            continue
+            return f"File not in manifest: {display}"
 
-        try:
-            content = connector.read_file(path, filename)
-            directory_id = directory_map.get(path) if path else None
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                content = connector.read_file(path, filename)
+                directory_id = directory_map.get(path) if path else None
+                client.upload_file(
+                    file_content=content,
+                    filename=filename,
+                    kb_id=kb_id,
+                    file_hash=manifest_entry.checksum,
+                    directory_id=directory_id,
+                )
+                return change_type  # success
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code >= 500 and attempt < 2:
+                    time.sleep(2 ** attempt)
+                    last_err = e
+                    continue
+                last_err = e
+                break
+            except Exception as e:
+                last_err = e
+                break
 
-            client.upload_file(
-                file_content=content,
-                filename=filename,
-                kb_id=kb_id,
-                file_hash=manifest_entry.checksum,
-                directory_id=directory_id,
-            )
+        click.echo(click.style(f"  ✗ {display}: {last_err}", fg="red"), err=True)
+        return f"{display}: {last_err}"
 
-            if change_type == "added":
+    if concurrency > 1 and len(files_to_upload) > 1:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {
+                pool.submit(_upload_one, i, entry, ct): (entry, ct)
+                for i, (entry, ct) in enumerate(files_to_upload, 1)
+            }
+            for future in as_completed(futures):
+                outcome = future.result()
+                if outcome == "added":
+                    result.added += 1
+                elif outcome == "modified":
+                    result.modified += 1
+                elif outcome is not None:
+                    result.errors.append(outcome)
+    else:
+        for i, (entry, change_type) in enumerate(files_to_upload, 1):
+            outcome = _upload_one(i, entry, change_type)
+            if outcome == "added":
                 result.added += 1
-            else:
+            elif outcome == "modified":
                 result.modified += 1
-
-        except Exception as e:
-            result.errors.append(f"{display}: {e}")
-            click.echo(
-                click.style(f"  ✗ {display}: {e}", fg="red"),
-                err=True,
-            )
+            elif outcome is not None:
+                result.errors.append(outcome)
 
     return result
 

@@ -66,3 +66,12 @@ class BaseConnector(ABC):
         Returns:
             Raw bytes of the file content.
         """
+
+    def close(self) -> None:
+        """Release any resources (HTTP clients, etc.). No-op by default."""
+
+    def __enter__(self) -> BaseConnector:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()

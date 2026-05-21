@@ -38,6 +38,7 @@ class GitHubConnector(BaseConnector):
         self.branch = branch
         self.path = path.strip("/") if path else None
         self._token = token or os.environ.get("GITHUB_TOKEN")
+        self._default_branch: str | None = None
 
         headers: dict[str, str] = {"Accept": "application/vnd.github+json"}
         if self._token:
@@ -116,10 +117,12 @@ class GitHubConnector(BaseConnector):
         return resp.content
 
     def _get_default_branch(self) -> str:
-        """Fetch the repo's default branch name."""
-        resp = self._http.get(f"/repos/{self.owner}/{self.repo}")
-        resp.raise_for_status()
-        return resp.json()["default_branch"]
+        """Fetch and cache the repo's default branch name."""
+        if self._default_branch is None:
+            resp = self._http.get(f"/repos/{self.owner}/{self.repo}")
+            resp.raise_for_status()
+            self._default_branch = resp.json()["default_branch"]
+        return self._default_branch
 
     def close(self) -> None:
         self._http.close()

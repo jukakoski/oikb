@@ -1,6 +1,6 @@
 [project]
 name = "oikb"
-version = "0.2.3"
+version = "0.2.4"
 description = "Sync anything to Open WebUI Knowledge Bases"
 readme = "README.md"
 authors = [
@@ -18,9 +18,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-github = ["httpx"]
-gitlab = ["httpx"]
-bitbucket = ["httpx"]
 s3 = ["boto3>=1.34"]
 gcs = ["google-cloud-storage>=2.14"]
 azure = ["azure-storage-blob>=12.19"]
@@ -28,39 +25,9 @@ dropbox = ["dropbox>=12.0"]
 r2 = ["boto3>=1.34"]
 gdrive = ["google-api-python-client>=2.100", "google-auth>=2.25"]
 gmail = ["google-api-python-client>=2.100", "google-auth>=2.25"]
-confluence = ["httpx"]
-notion = ["httpx"]
-bookstack = ["httpx"]
-discourse = ["httpx"]
-gitbook = ["httpx"]
-guru = ["httpx"]
-slack = ["httpx"]
-discord = ["httpx"]
-teams = ["httpx"]
-jira = ["httpx"]
-linear = ["httpx"]
-asana = ["httpx"]
-clickup = ["httpx"]
-zendesk = ["httpx"]
-freshdesk = ["httpx"]
-airtable = ["httpx"]
-hubspot = ["httpx"]
-salesforce = ["httpx"]
-sharepoint = ["httpx"]
-web = ["beautifulsoup4>=4.12"]
-document360 = ["httpx"]
-slab = ["httpx"]
-outline = ["httpx"]
 gsites = ["google-api-python-client>=2.100", "google-auth>=2.25"]
-egnyte = ["httpx"]
+web = ["beautifulsoup4>=4.12"]
 oracle = ["oci"]
-productboard = ["httpx"]
-xenforo = ["httpx"]
-zulip = ["httpx"]
-gong = ["httpx"]
-fireflies = ["httpx"]
-dokuwiki = []
-servicenow = ["httpx"]
 all = [
     "boto3>=1.34",
     "google-cloud-storage>=2.14",

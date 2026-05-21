@@ -38,7 +38,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.2.3",
+    version="0.2.4",
 )
 
 # Runtime state populated by start_daemon().
@@ -144,11 +144,23 @@ async def _run_entry(entry: dict) -> None:
             url=entry.get("url"),
             token=entry.get("token"),
         )
+
+        mf = None
+        entry_filter = entry.get("filter", {})
+        if entry_filter.get("include") or entry_filter.get("exclude"):
+            from oikb.sync import build_manifest_filter
+            mf = build_manifest_filter(
+                include=entry_filter.get("include"),
+                exclude=entry_filter.get("exclude"),
+            )
+
         result = run_sync(
             client=client,
             connector=connector,
             kb_id=kb_id,
             quiet=True,
+            manifest_filter=mf,
+            concurrency=entry.get("concurrency", 1),
         )
         client.close()
 

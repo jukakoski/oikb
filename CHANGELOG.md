@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.4] - 2025-05-21
+
+### Added
+
+- `oikb validate` command — validate `.oikb.yaml` without running syncs.
+- `--concurrency` flag for `oikb sync` — opt-in parallel uploads (also configurable per-entry in `.oikb.yaml`).
+- Upload retry with exponential backoff — transient 5xx errors retry up to 3 times.
+
+### Fixed
+
+- Daemon now applies `filter.include`/`filter.exclude` from `.oikb.yaml` (previously silently ignored).
+- Connector HTTP clients are now properly closed after sync completes.
+- GitHub connector caches default branch lookup — eliminates redundant API calls per file.
+
+### Changed
+
+- Removed 30+ no-op optional dependencies from `pyproject.toml` (`[github]`, `[confluence]`, etc.) that just re-declared httpx (already a core dep). Only extras with real dependencies remain: `s3`, `gcs`, `azure`, `dropbox`, `r2`, `gdrive`, `gmail`, `gsites`, `web`, `oracle`.
+
 ## [0.2.3] - 2025-05-21
 
 ### Removed

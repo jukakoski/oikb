@@ -28,6 +28,7 @@ oikb watch ./docs --kb-id your-kb-id
 | `oikb watch <dir>` | Watch for changes and auto-sync |
 | `oikb daemon` | Long-lived scheduler with HTTP API |
 | `oikb diff <source>` | Preview what a sync would do |
+| `oikb validate` | Validate `.oikb.yaml` without running |
 | `oikb history` | View sync history |
 | `oikb ls` | List files in a Knowledge Base |
 | `oikb status` | Show KB info and file count |

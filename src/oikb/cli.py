@@ -300,6 +300,7 @@ def _load_oikb_yaml() -> list[dict] | None:
 @click.option("--dry-run", is_flag=True, help="Preview changes without uploading.")
 @click.option("-v", "--verbose", is_flag=True, help="Show detailed progress.")
 @click.option("--name", default=None, help="Target a specific entry in .oikb.yaml by name/kb-id.")
+@click.option("--concurrency", default=1, type=int, help="Parallel upload workers (default: 1, sequential).")
 @click.pass_context
 def sync(
     ctx: click.Context,
@@ -312,6 +313,7 @@ def sync(
     dry_run: bool,
     verbose: bool,
     name: str | None,
+    concurrency: int,
 ):
     """Incremental sync from a source to a Knowledge Base.
 
@@ -374,6 +376,7 @@ def sync(
                     verbose=verbose,
                     quiet=quiet,
                     manifest_filter=mf,
+                    concurrency=entry.get("concurrency", concurrency),
                 )
 
                 if not quiet:
@@ -418,6 +421,7 @@ def sync(
             dry_run=dry_run,
             verbose=verbose,
             quiet=quiet,
+            concurrency=concurrency,
         )
     except Exception as e:
         click.echo(click.style(f"Sync failed: {e}", fg="red"), err=True)
@@ -705,6 +709,49 @@ def config_get(key: str | None):
         click.echo(data)
     else:
         click.echo("(not set)")
+
+
+# ── validate ────────────────────────────────────────────────────
+
+@cli.command()
+@click.option("--config", "config_file", default=None, type=click.Path(), help="Path to .oikb.yaml (default: ./.oikb.yaml).")
+def validate(config_file: str | None):
+    """Validate .oikb.yaml without running anything."""
+    if config_file:
+        import yaml
+        with open(config_file) as f:
+            data = yaml.safe_load(f)
+        entries = (data.get("sources") or data.get("sync", [])) if data else []
+    else:
+        entries = _load_oikb_yaml()
+
+    if not entries:
+        click.echo(click.style("No .oikb.yaml found or file is empty.", fg="red"), err=True)
+        sys.exit(1)
+
+    has_errors = False
+    for i, entry in enumerate(entries, 1):
+        entry_name = entry.get("name", f"entry #{i}")
+        source = entry.get("source")
+        kb_id = entry.get("kb-id")
+
+        if not source or not kb_id:
+            click.echo(click.style(f"  ✗ {entry_name}: missing source or kb-id", fg="red"))
+            has_errors = True
+            continue
+
+        # Try resolving the connector to catch bad source strings.
+        try:
+            _resolve_connector(source)
+            click.echo(click.style(f"  ✓ {entry_name}", fg="green") + f"  {source} → {kb_id}")
+        except Exception as e:
+            click.echo(click.style(f"  ✗ {entry_name}: {e}", fg="red"))
+            has_errors = True
+
+    if has_errors:
+        sys.exit(1)
+    else:
+        click.echo(click.style(f"\n{len(entries)} entry(s) valid.", fg="green"))
 
 
 # ── daemon ──────────────────────────────────────────────────────
