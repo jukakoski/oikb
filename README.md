@@ -56,26 +56,44 @@ Features:
 
 ```yaml
 # .oikb.yaml
+defaults:
+  interval: 1h
+  concurrency: 4
+  filter:
+    max-size: 50mb
+  notify:
+    url: https://hooks.slack.com/services/T.../B.../xxx
+    on: error
+
 sources:
   - name: wiki
     source: github:owner/repo
     kb-id: 8f3a2b1c-...
-    interval: 1h              # simple interval
     webhook: true
-    notify:
-      url: https://hooks.slack.com/services/T.../B.../xxx
-      on: error               # error (default) | always
 
   - name: handbook
     source: confluence:ENG
     kb-id: 4e7d9a0f-...
-    interval: "0 6 * * 1-5"   # cron: weekdays at 6am
+    interval: "0 6 * * 1-5"   # overrides default
 ```
 
 ```bash
 oikb sync --name wiki          # CLI: sync a specific entry
 curl -X POST /sync/wiki        # API: trigger by name
 curl -X POST /sync/8f3a2b1c-.. # API: trigger by kb-id
+```
+
+### Docker
+
+```bash
+docker run -d \
+  -e OPEN_WEBUI_URL=http://open-webui:8080 \
+  -e OPEN_WEBUI_API_KEY=sk-... \
+  -e OIKB_API_KEY=your-daemon-key \
+  -e LOG_FORMAT=json \
+  -v ./.oikb.yaml:/app/.oikb.yaml:ro \
+  -p 8080:8080 \
+  ghcr.io/open-webui/oikb:latest daemon
 ```
 
 ### Docker Compose
@@ -93,6 +111,7 @@ services:
       - OPEN_WEBUI_URL=http://open-webui:8080
       - OPEN_WEBUI_API_KEY=${OPEN_WEBUI_API_KEY}
       - OIKB_API_KEY=${OIKB_API_KEY}
+      - LOG_FORMAT=json
     volumes:
       - ./.oikb.yaml:/app/.oikb.yaml:ro
     command: daemon

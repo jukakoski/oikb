@@ -295,6 +295,17 @@ def _interpolate_env(obj: Any) -> Any:
     return obj
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep merge two dicts. Values in override take precedence."""
+    result = base.copy()
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
 def _load_oikb_yaml() -> list[dict] | None:
     """Load .oikb.yaml from the current directory if it exists."""
     import yaml
@@ -314,7 +325,15 @@ def _load_oikb_yaml() -> list[dict] | None:
 
     # Prefer sources: (new), fall back to sync: (legacy).
     entries = data.get("sources") or data.get("sync")
-    return entries or None
+    if not entries:
+        return None
+
+    # Apply global defaults to each entry.
+    defaults = data.get("defaults", {})
+    if defaults:
+        entries = [_deep_merge(defaults, entry) for entry in entries]
+
+    return entries
 
 
 def _build_cli_filter(max_file_size: str | None):
@@ -817,6 +836,9 @@ def daemon(port: int, no_server: bool, config_file: str | None, log_format: str 
             data = yaml.safe_load(f)
         data = _interpolate_env(data) if data else data
         entries = (data.get("sources") or data.get("sync", [])) if data else []
+        defaults = data.get("defaults", {}) if data else {}
+        if defaults and entries:
+            entries = [_deep_merge(defaults, e) for e in entries]
     else:
         entries = _load_oikb_yaml()
 

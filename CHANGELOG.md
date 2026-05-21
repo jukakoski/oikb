@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.2] - 2025-05-21
+
+### Added
+
+- Global `defaults:` key in `.oikb.yaml` — set `interval`, `concurrency`, `filter`, `notify`, or any other key once and have it apply to all entries. Per-entry values override defaults. Deep merges nested dicts (filter, notify).
+
 ## [0.3.1] - 2025-05-21
 
 ### Added
