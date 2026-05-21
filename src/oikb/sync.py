@@ -60,15 +60,37 @@ class SyncResult:
         return ", ".join(parts) if parts else "nothing to do"
 
 
+def parse_size(value: str | int | None) -> int | None:
+    """Parse a human-readable size string to bytes.
+
+    Examples: '50mb' → 52428800, '1gb' → 1073741824, '500kb' → 512000.
+    Returns None if value is None or empty.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+
+    value = value.strip().lower()
+    multipliers = {"b": 1, "kb": 1024, "mb": 1024 ** 2, "gb": 1024 ** 3}
+
+    for suffix, mult in sorted(multipliers.items(), key=lambda x: -len(x[0])):
+        if value.endswith(suffix):
+            return int(float(value[: -len(suffix)].strip()) * mult)
+
+    return int(value)
+
+
 def build_manifest_filter(
     include: list[str] | None = None,
     exclude: list[str] | None = None,
+    max_size: int | None = None,
 ) -> Callable[[list[ManifestEntry]], list[ManifestEntry]] | None:
-    """Build a filter function from glob include/exclude patterns.
+    """Build a filter function from glob include/exclude patterns and size limit.
 
     Returns None if no filtering is needed.
     """
-    if not include and not exclude:
+    if not include and not exclude and max_size is None:
         return None
 
     def _filter(entries: list[ManifestEntry]) -> list[ManifestEntry]:
@@ -79,10 +101,29 @@ def build_manifest_filter(
                 continue
             if exclude and any(fnmatch.fnmatch(path, p) for p in exclude):
                 continue
+            if max_size is not None and entry.size > max_size:
+                click.echo(
+                    click.style(
+                        f"  ⚠ Skipping {path} ({_fmt_size(entry.size)}) "
+                        f"— exceeds max-size ({_fmt_size(max_size)})",
+                        fg="yellow",
+                    ),
+                    err=True,
+                )
+                continue
             result.append(entry)
         return result
 
     return _filter
+
+
+def _fmt_size(n: int) -> str:
+    """Format bytes as a human-readable string."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
 
 
 def run_sync(

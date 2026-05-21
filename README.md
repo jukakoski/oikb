@@ -128,7 +128,7 @@ Some connectors need an optional extra: `pip install oikb[gdrive]`, `pip install
 
 ## Filters
 
-Narrow what gets synced with include/exclude globs:
+Narrow what gets synced with include/exclude globs and size limits:
 
 ```yaml
 sources:
@@ -138,6 +138,7 @@ sources:
     filter:
       include: ["docs/**/*.md", "*.txt"]
       exclude: ["drafts/**"]
+      max-size: 50mb
 ```
 
 To split a single source across multiple Knowledge Bases, use separate entries:

@@ -291,6 +291,14 @@ def _load_oikb_yaml() -> list[dict] | None:
     return entries or None
 
 
+def _build_cli_filter(max_file_size: str | None):
+    """Build a manifest filter from CLI-only flags (no yaml)."""
+    if not max_file_size:
+        return None
+    from oikb.sync import build_manifest_filter, parse_size
+    return build_manifest_filter(max_size=parse_size(max_file_size))
+
+
 # ── sync ────────────────────────────────────────────────────────
 
 @cli.command()
@@ -302,6 +310,7 @@ def _load_oikb_yaml() -> list[dict] | None:
 @click.option("-v", "--verbose", is_flag=True, help="Show detailed progress.")
 @click.option("--name", default=None, help="Target a specific entry in .oikb.yaml by name/kb-id.")
 @click.option("--concurrency", default=1, type=int, help="Parallel upload workers (default: 1, sequential).")
+@click.option("--max-file-size", default=None, help="Skip files larger than this (e.g. 50mb, 1gb).")
 @click.pass_context
 def sync(
     ctx: click.Context,
@@ -315,6 +324,7 @@ def sync(
     verbose: bool,
     name: str | None,
     concurrency: int,
+    max_file_size: str | None,
 ):
     """Incremental sync from a source to a Knowledge Base.
 
@@ -362,11 +372,15 @@ def sync(
                     click.echo(f"Syncing: {entry_source} → {entry_kb}")
 
                 mf = None
-                if entry_filter.get("include") or entry_filter.get("exclude"):
-                    from oikb.sync import build_manifest_filter
+                inc = entry_filter.get("include")
+                exc = entry_filter.get("exclude")
+                ms = entry_filter.get("max-size") or max_file_size
+                if inc or exc or ms:
+                    from oikb.sync import build_manifest_filter, parse_size
                     mf = build_manifest_filter(
-                        include=entry_filter.get("include"),
-                        exclude=entry_filter.get("exclude"),
+                        include=inc,
+                        exclude=exc,
+                        max_size=parse_size(ms),
                     )
 
                 result = run_sync(
@@ -423,6 +437,7 @@ def sync(
             verbose=verbose,
             quiet=quiet,
             concurrency=concurrency,
+            manifest_filter=_build_cli_filter(max_file_size),
         )
     except Exception as e:
         click.echo(click.style(f"Sync failed: {e}", fg="red"), err=True)

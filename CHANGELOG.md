@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.9] - 2025-05-21
+
+### Added
+
+- `filter.max-size` — skip files exceeding a size limit (e.g. `50mb`, `1gb`). Configurable per-entry in `.oikb.yaml` or via `--max-file-size` CLI flag. Oversized files are warned and excluded before diffing.
+
 ## [0.2.8] - 2025-05-21
 
 ### Added
