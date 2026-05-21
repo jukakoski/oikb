@@ -40,7 +40,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.3.4",
+    version="0.3.5",
 )
 
 # Runtime state populated by start_daemon().
@@ -82,7 +82,62 @@ def _next_cron_delay(cron_expr: str) -> float:
     return max((next_time - now).total_seconds(), 1.0)
 
 
+# ── Dashboard ────────────────────────────────────────────────────
+
+from fastapi.responses import HTMLResponse
+
+_DASHBOARD_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oikb</title>
+<style>
+body{font-family:monospace;background:#111;color:#ccc;padding:2rem;font-size:14px}
+h1{font-size:16px;margin-bottom:1rem;color:#fff}
+.row{padding:.5rem 0;border-bottom:1px solid #222;display:flex;gap:1rem;align-items:baseline}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.ok{background:#22c55e}.run{background:#3b82f6}.err{background:#ef4444}.warn{background:#f59e0b}.idle{background:#555}
+.name{color:#fff;min-width:120px}.dim{color:#666}
+.error{color:#ef4444;font-size:12px;margin-left:28px;margin-top:2px}
+</style>
+</head>
+<body>
+<h1>oikb <span id="v" style="color:#666"></span></h1>
+<div id="out">loading...</div>
+<script>
+function ago(t){if(!t)return'-';const s=Math.floor(Date.now()/1000-t);if(s<60)return s+'s ago';if(s<3600)return(s/60|0)+'m ago';if(s<86400)return(s/3600|0)+'h ago';return(s/86400|0)+'d ago'}
+async function poll(){
+ try{
+  const d=await(await fetch('/health')).json();
+  document.getElementById('v').textContent=d.version||'';
+  const S=d.sources||{};const K=Object.keys(S);
+  if(!K.length){document.getElementById('out').textContent='no sources configured';return}
+  document.getElementById('out').innerHTML=K.map(k=>{
+   const s=S[k],st=s.status||'idle';
+   const c=st==='success'?'ok':st==='running'?'run':st==='error'?'err':st==='partial'?'warn':'idle';
+   const e=s.errors&&s.errors.length?'<div class="error">'+s.errors[0]+'</div>':'';
+   return '<div class="row"><span class="dot '+c+'"></span><span class="name">'+(s.name||k)+'</span>'
+    +'<span class="dim">'+ago(s.last_sync)+'</span>'
+    +'<span class="dim">'+(s.duration_ms?s.duration_ms+'ms':'-')+'</span>'
+    +'<span class="dim">+'+( s.files_added||0)+' ~'+(s.files_modified||0)+' -'+(s.files_deleted||0)+'</span>'
+    +'<span class="dim">'+(s.next_sync_in||'')+'</span></div>'+e
+  }).join('');
+ }catch(e){}
+}
+poll();setInterval(poll,10000);
+</script>
+</body>
+</html>"""
+
+
 # ── FastAPI routes ───────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+async def dashboard():
+    """Status dashboard — polls /health and renders source statuses."""
+    return _DASHBOARD_HTML
+
 
 @app.get(
     "/health",
@@ -93,6 +148,7 @@ async def health():
     """Returns the current sync status for every configured source, including last sync time, duration, file counts, and any errors. Use this to check if syncs are running and healthy."""
     return {
         "status": "ok",
+        "version": __version__,
         "sources": _scheduler_state,
     }
 
@@ -215,6 +271,7 @@ async def _run_entry_locked(entry: dict, dry_run: bool = False) -> dict | None:
 
     _scheduler_state[source] = {
         **_scheduler_state.get(source, {}),
+        "name": entry.get("name", source),
         "status": "running",
         "started_at": started_at,
     }
@@ -269,6 +326,7 @@ async def _run_entry_locked(entry: dict, dry_run: bool = False) -> dict | None:
         status = "success" if not result.errors else "partial"
 
         _scheduler_state[source] = {
+            "name": entry.get("name", source),
             "status": status,
             "last_sync": time.time(),
             "duration_ms": duration_ms,
@@ -319,6 +377,7 @@ async def _run_entry_locked(entry: dict, dry_run: bool = False) -> dict | None:
 
     except Exception as e:
         _scheduler_state[source] = {
+            "name": entry.get("name", source),
             "status": "error",
             "last_sync": time.time(),
             "error": str(e),

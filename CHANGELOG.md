@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.5] - 2025-05-21
+
+### Added
+
+- Status dashboard at `GET /` — monospace status page rendered client-side from `/health`. Shows source name, status dot, last sync time, duration, file counts, next sync. Polls every 10s. Zero dependencies.
+
 ## [0.3.4] - 2025-05-21
 
 ### Added
