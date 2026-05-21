@@ -25,6 +25,8 @@ oikb sync ./docs --kb-id your-kb-id --dry-run
 
 For multi-source, scheduled sync, or daemon mode — run `oikb init` to generate a `.oikb.yaml` config file, then `oikb daemon`.
 
+📖 **[Full Guide](docs/guide.md)** — installation, connectors, daemon, enterprise features, deployment, troubleshooting.
+
 ## Commands
 
 | Command | Description |
