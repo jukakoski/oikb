@@ -344,70 +344,44 @@ def sync(
             entry_kb = entry.get("kb-id")
             entry_branch = entry.get("branch")
             entry_path = entry.get("path")
-            entry_routes = entry.get("routes")
             entry_filter = entry.get("filter", {})
 
-            if not entry_source or (not entry_kb and not entry_routes):
-                click.echo(click.style(f"Skipping invalid entry (needs source + kb-id or routes): {entry}", fg="yellow"), err=True)
+            if not entry_source or not entry_kb:
+                click.echo(click.style(f"Skipping invalid entry (needs source + kb-id): {entry}", fg="yellow"), err=True)
                 continue
 
             try:
                 connector = _resolve_connector(entry_source, entry_branch, entry_path)
                 client = _make_client(url, token)
 
-                # ── Multi-KB routing mode ──
-                if entry_routes:
+                if not quiet:
+                    click.echo(f"\n{'─' * 40}")
+                    click.echo(f"Syncing: {entry_source} → {entry_kb}")
+
+                mf = None
+                if entry_filter.get("include") or entry_filter.get("exclude"):
                     from oikb.sync import build_manifest_filter
-                    for pattern, route_kb in entry_routes.items():
-                        if not quiet:
-                            click.echo(f"\n{'─' * 40}")
-                            click.echo(f"Syncing: {entry_source} [{pattern}] → {route_kb}")
-                        mf = build_manifest_filter(include=[pattern])
-                        result = run_sync(
-                            client=client,
-                            connector=connector,
-                            kb_id=route_kb,
-                            dry_run=dry_run,
-                            verbose=verbose,
-                            quiet=quiet,
-                            manifest_filter=mf,
-                        )
-                        if not quiet:
-                            prefix = "Dry run" if dry_run else "Done"
-                            click.echo(f"  {prefix}: {result.summary()}")
-                        if result.errors:
-                            has_errors = True
-
-                # ── Standard single-KB mode ──
-                else:
-                    if not quiet:
-                        click.echo(f"\n{'─' * 40}")
-                        click.echo(f"Syncing: {entry_source} → {entry_kb}")
-
-                    mf = None
-                    if entry_filter.get("include") or entry_filter.get("exclude"):
-                        from oikb.sync import build_manifest_filter
-                        mf = build_manifest_filter(
-                            include=entry_filter.get("include"),
-                            exclude=entry_filter.get("exclude"),
-                        )
-
-                    result = run_sync(
-                        client=client,
-                        connector=connector,
-                        kb_id=entry_kb,
-                        dry_run=dry_run,
-                        verbose=verbose,
-                        quiet=quiet,
-                        manifest_filter=mf,
+                    mf = build_manifest_filter(
+                        include=entry_filter.get("include"),
+                        exclude=entry_filter.get("exclude"),
                     )
 
-                    if not quiet:
-                        prefix = "Dry run" if dry_run else "Done"
-                        click.echo(f"  {prefix}: {result.summary()}")
+                result = run_sync(
+                    client=client,
+                    connector=connector,
+                    kb_id=entry_kb,
+                    dry_run=dry_run,
+                    verbose=verbose,
+                    quiet=quiet,
+                    manifest_filter=mf,
+                )
 
-                    if result.errors:
-                        has_errors = True
+                if not quiet:
+                    prefix = "Dry run" if dry_run else "Done"
+                    click.echo(f"  {prefix}: {result.summary()}")
+
+                if result.errors:
+                    has_errors = True
 
                 client.close()
 

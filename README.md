@@ -124,21 +124,7 @@ oikb sync servicenow:incident --kb-id your-kb-id
 
 Some connectors need an optional extra: `pip install oikb[gdrive]`, `pip install oikb[s3]`, or `pip install oikb[all]` for everything.
 
-## Multi-KB Routing
-
-Route files from a single source to different Knowledge Bases by glob pattern:
-
-```yaml
-sources:
-  - name: wiki
-    source: github:owner/repo
-    kb-id: 8f3a2b1c-...
-    routes:
-      "docs/**/*.md": docs-kb-id
-      "src/**": code-kb-id
-```
-
-## Selective Sync Filters
+## Filters
 
 Narrow what gets synced with include/exclude globs:
 
@@ -150,6 +136,23 @@ sources:
     filter:
       include: ["docs/**/*.md", "*.txt"]
       exclude: ["drafts/**"]
+```
+
+To split a single source across multiple Knowledge Bases, use separate entries:
+
+```yaml
+sources:
+  - name: wiki-docs
+    source: github:owner/repo
+    kb-id: abc123-...
+    filter:
+      include: ["docs/**/*.md"]
+
+  - name: wiki-code
+    source: github:owner/repo
+    kb-id: def456-...
+    filter:
+      include: ["src/**"]
 ```
 
 ## Configuration
