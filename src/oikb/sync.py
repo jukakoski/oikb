@@ -10,9 +10,21 @@ from typing import Any, Callable
 
 import click
 import httpx
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from oikb.client import OikbClient
 from oikb.connectors import BaseConnector, ManifestEntry
+
+# Stderr console for progress output (keeps stdout clean for piping).
+_console = Console(stderr=True)
 
 
 @dataclass
@@ -117,19 +129,26 @@ def _run_sync_inner(
     result: SyncResult,
 ) -> SyncResult:
     """Inner sync logic, separated for clean connector cleanup."""
+    show_progress = not quiet and not dry_run
+
     # ── 1. Build manifest ──────────────────────────────────────
-    if verbose:
-        click.echo("Scanning source...", err=True)
-
-    manifest = connector.build_manifest()
-
-    if verbose:
-        click.echo(f"  {len(manifest)} files found", err=True)
+    if show_progress:
+        with _console.status("[bold blue]Scanning source..."):
+            manifest = connector.build_manifest()
+        _console.print(f"  [dim]{len(manifest)} files found[/dim]")
+    else:
+        if verbose:
+            click.echo("Scanning source...", err=True)
+        manifest = connector.build_manifest()
+        if verbose:
+            click.echo(f"  {len(manifest)} files found", err=True)
 
     # ── 2. Apply filter ────────────────────────────────────────
     if manifest_filter:
         manifest = manifest_filter(manifest)
-        if verbose:
+        if show_progress:
+            _console.print(f"  [dim]{len(manifest)} files after filtering[/dim]")
+        elif verbose:
             click.echo(f"  {len(manifest)} files after filtering", err=True)
 
     if not manifest:
@@ -138,10 +157,13 @@ def _run_sync_inner(
         return result
 
     # ── 3. Compute diff ────────────────────────────────────────
-    if verbose:
-        click.echo("Computing diff...", err=True)
-
-    diff = client.sync_diff(kb_id, [e.to_dict() for e in manifest])
+    if show_progress:
+        with _console.status("[bold blue]Computing diff..."):
+            diff = client.sync_diff(kb_id, [e.to_dict() for e in manifest])
+    else:
+        if verbose:
+            click.echo("Computing diff...", err=True)
+        diff = client.sync_diff(kb_id, [e.to_dict() for e in manifest])
 
     added: list[dict[str, Any]] = diff.get("added", [])
     modified: list[dict[str, Any]] = diff.get("modified", [])
@@ -152,6 +174,18 @@ def _run_sync_inner(
     directory_map: dict[str, str] = diff.get("directory_map", {})
 
     result.unmodified = unmodified_count
+
+    if show_progress:
+        parts = []
+        if added:
+            parts.append(f"[green]+{len(added)}[/green]")
+        if modified:
+            parts.append(f"[yellow]~{len(modified)}[/yellow]")
+        if deleted:
+            parts.append(f"[red]-{len(deleted)}[/red]")
+        if unmodified_count:
+            parts.append(f"[dim]{unmodified_count} unchanged[/dim]")
+        _console.print(f"  Diff: {', '.join(parts)}" if parts else "  [dim]Nothing to do[/dim]")
 
     # ── Dry run: just print what would happen ──────────────────
     if dry_run:
@@ -199,12 +233,16 @@ def _run_sync_inner(
     ]
 
     if stale_file_ids or rmdir:
-        if verbose:
-            click.echo(
-                f"Cleaning up {len(stale_file_ids)} files, {len(rmdir)} dirs...",
-                err=True,
-            )
-        client.sync_cleanup(kb_id, stale_file_ids, rmdir if rmdir else None)
+        if show_progress:
+            with _console.status(f"[bold blue]Cleaning up {len(stale_file_ids)} stale files..."):
+                client.sync_cleanup(kb_id, stale_file_ids, rmdir if rmdir else None)
+        else:
+            if verbose:
+                click.echo(
+                    f"Cleaning up {len(stale_file_ids)} files, {len(rmdir)} dirs...",
+                    err=True,
+                )
+            client.sync_cleanup(kb_id, stale_file_ids, rmdir if rmdir else None)
         result.deleted = len(deleted)
         result.dirs_removed = len(rmdir)
 
@@ -230,13 +268,18 @@ def _run_sync_inner(
         *[(m, "modified") for m in modified],
     ]
 
-    def _upload_one(i: int, entry: dict, change_type: str) -> str | None:
+    if not files_to_upload:
+        return result
+
+    def _upload_one(
+        i: int, entry: dict, change_type: str, progress: Progress | None, task_id: Any,
+    ) -> str | None:
         """Upload a single file with retry. Returns error string or None."""
         filename = entry["filename"]
         path = entry.get("path", "")
         display = f"{path}/{filename}" if path else filename
 
-        if verbose:
+        if verbose and not progress:
             click.echo(f"  [{i}/{len(files_to_upload)}] {display}", err=True)
 
         manifest_entry = manifest_by_key.get((path, filename))
@@ -255,6 +298,8 @@ def _run_sync_inner(
                     file_hash=manifest_entry.checksum,
                     directory_id=directory_id,
                 )
+                if progress is not None:
+                    progress.update(task_id, advance=1, description=f"[cyan]{display}[/cyan]")
                 return change_type  # success
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500 and attempt < 2:
@@ -267,32 +312,61 @@ def _run_sync_inner(
                 last_err = e
                 break
 
-        click.echo(click.style(f"  ✗ {display}: {last_err}", fg="red"), err=True)
+        if progress is not None:
+            progress.update(task_id, advance=1, description=f"[red]✗ {display}[/red]")
+        else:
+            click.echo(click.style(f"  ✗ {display}: {last_err}", fg="red"), err=True)
         return f"{display}: {last_err}"
 
-    if concurrency > 1 and len(files_to_upload) > 1:
-        with ThreadPoolExecutor(max_workers=concurrency) as pool:
-            futures = {
-                pool.submit(_upload_one, i, entry, ct): (entry, ct)
-                for i, (entry, ct) in enumerate(files_to_upload, 1)
-            }
-            for future in as_completed(futures):
-                outcome = future.result()
-                if outcome == "added":
-                    result.added += 1
-                elif outcome == "modified":
-                    result.modified += 1
-                elif outcome is not None:
-                    result.errors.append(outcome)
+    def _tally(outcome: str | None) -> None:
+        """Update result counters from an upload outcome."""
+        if outcome == "added":
+            result.added += 1
+        elif outcome == "modified":
+            result.modified += 1
+        elif outcome is not None:
+            result.errors.append(outcome)
+
+    if show_progress:
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]Uploading"),
+            BarColumn(bar_width=30),
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TextColumn("{task.description}"),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            console=_console,
+            transient=True,
+        )
+        with progress:
+            task_id = progress.add_task("", total=len(files_to_upload))
+
+            if concurrency > 1 and len(files_to_upload) > 1:
+                with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                    futures = {
+                        pool.submit(_upload_one, i, entry, ct, progress, task_id): (entry, ct)
+                        for i, (entry, ct) in enumerate(files_to_upload, 1)
+                    }
+                    for future in as_completed(futures):
+                        _tally(future.result())
+            else:
+                for i, (entry, change_type) in enumerate(files_to_upload, 1):
+                    _tally(_upload_one(i, entry, change_type, progress, task_id))
     else:
-        for i, (entry, change_type) in enumerate(files_to_upload, 1):
-            outcome = _upload_one(i, entry, change_type)
-            if outcome == "added":
-                result.added += 1
-            elif outcome == "modified":
-                result.modified += 1
-            elif outcome is not None:
-                result.errors.append(outcome)
+        # Quiet or daemon mode — no progress bar.
+        if concurrency > 1 and len(files_to_upload) > 1:
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futures = {
+                    pool.submit(_upload_one, i, entry, ct, None, None): (entry, ct)
+                    for i, (entry, ct) in enumerate(files_to_upload, 1)
+                }
+                for future in as_completed(futures):
+                    _tally(future.result())
+        else:
+            for i, (entry, change_type) in enumerate(files_to_upload, 1):
+                _tally(_upload_one(i, entry, change_type, None, None))
 
     return result
 

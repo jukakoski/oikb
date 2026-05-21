@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.5] - 2025-05-21
+
+### Added
+
+- Rich progress bars for sync operations — spinner during scan/diff, progress bar during uploads with file count and elapsed time.
+- `rich>=13.0` added as a core dependency.
+
 ## [0.2.4] - 2025-05-21
 
 ### Added
