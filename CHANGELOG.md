@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.3] - 2025-05-21
+
+### Added
+
+- `oikb init` — interactive wizard that generates `.oikb.yaml`. Prompts for source, KB ID, name, and interval. Outputs next-step commands. Reduces onboarding from "read docs and write YAML" to "answer 4 questions."
+
 ## [0.3.2] - 2025-05-21
 
 ### Added

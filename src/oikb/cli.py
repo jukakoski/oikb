@@ -772,6 +772,60 @@ def config_get(key: str | None):
         click.echo("(not set)")
 
 
+# ── init ────────────────────────────────────────────────────────
+
+@cli.command()
+@click.option("--force", is_flag=True, help="Overwrite existing .oikb.yaml.")
+def init(force: bool):
+    """Generate a .oikb.yaml config file interactively.
+
+    \b
+    Asks for source, Knowledge Base ID, name, and interval,
+    then writes a ready-to-use config file.
+    """
+    yaml_path = Path(".oikb.yaml")
+    if yaml_path.exists() and not force:
+        click.echo(click.style(f"{yaml_path} already exists. Use --force to overwrite.", fg="red"), err=True)
+        sys.exit(1)
+
+    click.echo(click.style("oikb init — generate .oikb.yaml\n", bold=True))
+
+    entries: list[dict] = []
+    while True:
+        click.echo(click.style(f"─ Source #{len(entries) + 1}", fg="cyan"))
+
+        source = click.prompt(
+            "  Source (e.g. ./docs, github:owner/repo, confluence:SPACE)",
+            type=str,
+        )
+        kb_id = click.prompt("  Knowledge Base ID", type=str)
+        name = click.prompt("  Name (short alias)", default=source.split(":")[-1].split("/")[-1], type=str)
+        interval = click.prompt("  Sync interval (daemon mode)", default="1h", type=str)
+
+        entries.append({
+            "name": name,
+            "source": source,
+            "kb-id": kb_id,
+            "interval": interval,
+        })
+
+        if not click.confirm("\n  Add another source?", default=False):
+            break
+        click.echo()
+
+    import yaml
+
+    data: dict = {"sources": entries}
+    yaml_path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+
+    click.echo(f"\n{click.style('✓', fg='green')} Wrote {yaml_path}")
+    click.echo(f"\n  {click.style('Next steps:', bold=True)}")
+    click.echo(f"  oikb validate        # check your config")
+    click.echo(f"  oikb sync            # run a one-time sync")
+    click.echo(f"  oikb sync --dry-run  # preview without uploading")
+    click.echo(f"  oikb daemon          # start scheduled sync")
+
+
 # ── validate ────────────────────────────────────────────────────
 
 @cli.command()

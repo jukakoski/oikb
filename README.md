@@ -13,17 +13,24 @@ pip install oikb
 export OPEN_WEBUI_URL=http://localhost:3000
 export OPEN_WEBUI_API_KEY=sk-your-api-key
 
-# Sync a directory to a Knowledge Base
-oikb sync ./docs --kb-id your-kb-id
+# Generate a config file
+oikb init
 
-# Or watch for changes and auto-sync continuously
-oikb watch ./docs --kb-id your-kb-id
+# Preview what would sync
+oikb sync --dry-run
+
+# Run the sync
+oikb sync
+
+# Or start the daemon for scheduled sync
+oikb daemon
 ```
 
 ## Commands
 
 | Command | Description |
 |---|---|
+| `oikb init` | Generate `.oikb.yaml` interactively |
 | `oikb sync <source>` | Incremental sync to a Knowledge Base |
 | `oikb watch <dir>` | Watch for changes and auto-sync |
 | `oikb daemon` | Long-lived scheduler with HTTP API |

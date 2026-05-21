@@ -40,7 +40,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.3.2",
+    version="0.3.3",
 )
 
 # Runtime state populated by start_daemon().
