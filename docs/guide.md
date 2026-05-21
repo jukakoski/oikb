@@ -645,6 +645,7 @@ oikb daemon --log-format json       JSON logging
 oikb daemon --config /path/to/yaml  Custom config path
 oikb diff <source> --kb-id ID       Preview changes
 oikb validate                       Check .oikb.yaml syntax
+oikb validate --deep                Verify API, auth, and KB existence
 oikb ls --kb-id ID                  List files in a KB
 oikb status --kb-id ID              Show KB info
 oikb history                        View sync history
@@ -686,7 +687,8 @@ You're running `oikb sync` without arguments and there's no `.oikb.yaml` in the 
 ### Daemon won't start
 
 ```bash
-oikb validate  # Check config syntax first
+oikb validate        # Check config syntax
+oikb validate --deep # Verify API + KB connectivity
 ```
 
 ### How do I find my KB ID?

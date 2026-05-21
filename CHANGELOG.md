@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.4] - 2025-05-21
+
+### Added
+
+- `oikb validate --deep` — verifies Open WebUI connectivity, API key validity, and that each KB ID exists. Catches config errors before deployment.
+
+### Fixed
+
+- `docker-compose.yaml` updated from stale `watch` mode to production `daemon` mode with healthcheck, `LOG_FORMAT=json`, and `OIKB_API_KEY` support.
+- `validate` now applies `defaults:` and env var interpolation to entries before checking (was only doing raw yaml).
+
 ## [0.3.3] - 2025-05-21
 
 ### Added

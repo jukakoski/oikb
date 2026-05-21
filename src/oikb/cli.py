@@ -830,19 +830,43 @@ def init(force: bool):
 
 @cli.command()
 @click.option("--config", "config_file", default=None, type=click.Path(), help="Path to .oikb.yaml (default: ./.oikb.yaml).")
-def validate(config_file: str | None):
-    """Validate .oikb.yaml without running anything."""
+@click.option("--deep", is_flag=True, help="Verify connectivity: ping Open WebUI, check API key, confirm each KB exists.")
+def validate(config_file: str | None, deep: bool):
+    """Validate .oikb.yaml without running anything.
+
+    By default, checks YAML structure and source syntax.
+    With --deep, also verifies the Open WebUI API is reachable,
+    the API key is valid, and each Knowledge Base ID exists.
+    """
     if config_file:
         import yaml
         with open(config_file) as f:
             data = yaml.safe_load(f)
+        data = _interpolate_env(data) if data else data
         entries = (data.get("sources") or data.get("sync", [])) if data else []
+        defaults = data.get("defaults", {}) if data else {}
+        if defaults and entries:
+            entries = [_deep_merge(defaults, e) for e in entries]
     else:
         entries = _load_oikb_yaml()
 
     if not entries:
         click.echo(click.style("No .oikb.yaml found or file is empty.", fg="red"), err=True)
         sys.exit(1)
+
+    # Deep validation: create a client and verify connectivity first.
+    client = None
+    if deep:
+        click.echo(click.style("Deep validation\n", bold=True))
+        try:
+            client = _make_client(
+                url=entries[0].get("url"),
+                token=entries[0].get("token"),
+            )
+            click.echo(click.style("  ✓ API reachable", fg="green") + f"  {client._http.base_url}")
+        except Exception as e:
+            click.echo(click.style(f"  ✗ Cannot reach Open WebUI: {e}", fg="red"))
+            sys.exit(1)
 
     has_errors = False
     for i, entry in enumerate(entries, 1):
@@ -855,13 +879,32 @@ def validate(config_file: str | None):
             has_errors = True
             continue
 
-        # Try resolving the connector to catch bad source strings.
+        # Syntax check: resolve the connector.
         try:
             _resolve_connector(source)
-            click.echo(click.style(f"  ✓ {entry_name}", fg="green") + f"  {source} → {kb_id}")
         except Exception as e:
             click.echo(click.style(f"  ✗ {entry_name}: {e}", fg="red"))
             has_errors = True
+            continue
+
+        # Deep check: verify the KB exists.
+        if deep and client:
+            try:
+                kb = client.get_kb(kb_id)
+                kb_name = kb.get("name", "?")
+                file_count = len(kb.get("files", []))
+                click.echo(
+                    click.style(f"  ✓ {entry_name}", fg="green")
+                    + f"  {source} → {kb_name} ({file_count} files)"
+                )
+            except Exception as e:
+                click.echo(click.style(f"  ✗ {entry_name}: KB {kb_id} — {e}", fg="red"))
+                has_errors = True
+        else:
+            click.echo(click.style(f"  ✓ {entry_name}", fg="green") + f"  {source} → {kb_id}")
+
+    if client:
+        client.close()
 
     if has_errors:
         sys.exit(1)
