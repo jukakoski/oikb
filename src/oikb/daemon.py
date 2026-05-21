@@ -38,7 +38,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.2.1",
+    version="0.2.2",
 )
 
 # Runtime state populated by start_daemon().
@@ -103,18 +103,18 @@ async def history_endpoint(
 
 
 @app.post(
-    "/sync/{source}",
+    "/sync/{identifier}",
     operation_id="trigger_sync",
-    summary="Trigger an immediate sync for a source",
+    summary="Trigger an immediate sync by alias or KB ID",
     dependencies=[Depends(verify_api_key)],
 )
-async def trigger_sync(source: str):
-    """Triggers an immediate sync for the given source or Knowledge Base ID. The sync runs asynchronously in the background. Use get_sync_status to check progress."""
+async def trigger_sync(identifier: str):
+    """Triggers an immediate sync matching the given alias or Knowledge Base ID. The sync runs asynchronously in the background. Use get_sync_status to check progress."""
     for entry in _entries:
-        if entry.get("source") == source or entry.get("kb-id") == source:
+        if entry.get("name") == identifier or entry.get("kb-id") == identifier:
             asyncio.create_task(_run_entry(entry))
-            return {"triggered": True, "source": entry.get("source")}
-    return {"triggered": False, "error": f"No entry matching '{source}'"}
+            return {"triggered": True, "name": entry.get("name"), "kb_id": entry.get("kb-id")}
+    return {"triggered": False, "error": f"No entry matching '{identifier}'"}
 
 
 # ── Scheduler ────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ def start_daemon(
             click.echo(f"  {len(webhook_entries)} webhook-enabled source(s)")
         click.echo(f"  GET  http://localhost:{port}/health")
         click.echo(f"  GET  http://localhost:{port}/history")
-        click.echo(f"  POST http://localhost:{port}/sync/{{source}}")
+        click.echo(f"  POST http://localhost:{port}/sync/{{kb_id}}")
         if webhook_entries:
             click.echo(f"  POST http://localhost:{port}/webhooks/github|gitlab|slack|confluence")
         click.echo(f"\n  OpenAPI spec: http://localhost:{port}/openapi.json")

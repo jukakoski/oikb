@@ -333,7 +333,7 @@ def sync(
 
         # Filter by --name if specified.
         if name:
-            entries = [e for e in entries if e.get("kb-id") == name or e.get("source") == name]
+            entries = [e for e in entries if e.get("name") == name or e.get("kb-id") == name]
             if not entries:
                 click.echo(click.style(f"No entry matching '{name}' in .oikb.yaml", fg="red"), err=True)
                 sys.exit(1)

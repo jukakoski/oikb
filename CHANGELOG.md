@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.2] - 2025-05-21
+
+### Added
+
+- `name` key for `.oikb.yaml` entries — use friendly names to target syncs via CLI (`--name wiki`) or API (`POST /sync/wiki`).
+
+### Changed
+
+- Daemon sync endpoint changed from `/sync/{source}` to `/sync/{identifier}` — accepts `name` or `kb-id` (UUIDs).
+
 ## [0.2.1] - 2025-05-20
 
 ### Added
