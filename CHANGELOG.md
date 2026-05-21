@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.1] - 2025-05-21
+
+### Added
+
+- Per-KB sync locking — prevents overlapping syncs to the same Knowledge Base. If a webhook fires while a scheduled sync is running, the duplicate is skipped with a log message.
+- Dry-run via API — `POST /sync/{id}?dry_run=true` previews changes without uploading, returns added/modified/deleted counts.
+- Environment variable interpolation in `.oikb.yaml` — `${VAR}` and `${VAR:-default}` syntax in all string values. Enables GitOps workflows where secrets come from the runtime.
+
 ## [0.3.0] - 2025-05-21
 
 ### Added

@@ -40,11 +40,12 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.3.0",
+    version="0.3.1",
 )
 
 # Runtime state populated by start_daemon().
 _scheduler_state: dict[str, dict[str, Any]] = {}
+_sync_locks: dict[str, asyncio.Lock] = {}
 _history: SyncHistory | None = None
 _entries: list[dict] = []
 _shutdown_event: asyncio.Event | None = None
@@ -128,10 +129,13 @@ async def history_endpoint(
     summary="Trigger an immediate sync by alias or KB ID",
     dependencies=[Depends(verify_api_key)],
 )
-async def trigger_sync(identifier: str):
-    """Triggers an immediate sync matching the given alias or Knowledge Base ID. The sync runs asynchronously in the background. Use get_sync_status to check progress."""
+async def trigger_sync(identifier: str, dry_run: bool = False):
+    """Triggers an immediate sync matching the given alias or Knowledge Base ID. The sync runs asynchronously in the background. Use get_sync_status to check progress. Set dry_run=true to preview changes without uploading."""
     for entry in _entries:
         if entry.get("name") == identifier or entry.get("kb-id") == identifier:
+            if dry_run:
+                result = await _run_entry(entry, dry_run=True)
+                return {"dry_run": True, "name": entry.get("name"), "kb_id": entry.get("kb-id"), "result": result}
             asyncio.create_task(_run_entry(entry))
             return {"triggered": True, "name": entry.get("name"), "kb_id": entry.get("kb-id")}
     return {"triggered": False, "error": f"No entry matching '{identifier}'"}
@@ -179,8 +183,29 @@ async def _send_notification(entry: dict, payload: dict) -> None:
         log.warning(f"Notification failed for {source}: {exc}")
 
 
-async def _run_entry(entry: dict) -> None:
-    """Run a single sync for an entry."""
+async def _run_entry(entry: dict, dry_run: bool = False) -> dict | None:
+    """Run a single sync for an entry.
+
+    Uses a per-KB lock to prevent overlapping syncs to the same
+    Knowledge Base (e.g. webhook fires while a scheduled sync is running).
+    """
+    kb_id = entry["kb-id"]
+
+    # Get or create a lock for this KB.
+    if kb_id not in _sync_locks:
+        _sync_locks[kb_id] = asyncio.Lock()
+    lock = _sync_locks[kb_id]
+
+    if lock.locked():
+        log.info(f"Skipping {entry.get('source', '?')} — sync already running for {kb_id}")
+        return {"skipped": True, "reason": "sync already running"} if dry_run else None
+
+    async with lock:
+        return await _run_entry_locked(entry, dry_run=dry_run)
+
+
+async def _run_entry_locked(entry: dict, dry_run: bool = False) -> dict | None:
+    """Inner sync logic, called under the per-KB lock."""
     from oikb.cli import _make_client, _resolve_connector
     from oikb.sync import run_sync
 
@@ -218,15 +243,26 @@ async def _run_entry(entry: dict) -> None:
                 max_size=parse_size(ms),
             )
 
-        result = run_sync(
+        result = await asyncio.to_thread(
+            run_sync,
             client=client,
             connector=connector,
             kb_id=kb_id,
+            dry_run=dry_run,
             quiet=True,
             manifest_filter=mf,
             concurrency=entry.get("concurrency", 1),
         )
         client.close()
+
+        if dry_run:
+            return {
+                "added": result.added,
+                "modified": result.modified,
+                "deleted": result.deleted,
+                "unmodified": result.unmodified,
+                "summary": result.summary(),
+            }
 
         duration_s = time.time() - started_at
         duration_ms = int(duration_s * 1000)

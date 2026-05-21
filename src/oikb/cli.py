@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -272,6 +273,28 @@ def _resolve_connector(source: str, branch: str | None = None, path: str | None 
     return FilesystemConnector(source)
 
 
+def _interpolate_env(obj: Any) -> Any:
+    """Recursively interpolate ${VAR} and ${VAR:-default} in string values."""
+    import re
+
+    _ENV_RE = re.compile(r"\$\{([^}]+)\}")
+
+    def _replace(match: re.Match) -> str:
+        expr = match.group(1)
+        if ":-" in expr:
+            var, default = expr.split(":-", 1)
+            return os.environ.get(var, default)
+        return os.environ.get(expr, match.group(0))
+
+    if isinstance(obj, str):
+        return _ENV_RE.sub(_replace, obj)
+    if isinstance(obj, dict):
+        return {k: _interpolate_env(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_interpolate_env(item) for item in obj]
+    return obj
+
+
 def _load_oikb_yaml() -> list[dict] | None:
     """Load .oikb.yaml from the current directory if it exists."""
     import yaml
@@ -285,6 +308,9 @@ def _load_oikb_yaml() -> list[dict] | None:
 
     if not data:
         return None
+
+    # Interpolate environment variables in all string values.
+    data = _interpolate_env(data)
 
     # Prefer sources: (new), fall back to sync: (legacy).
     entries = data.get("sources") or data.get("sync")
@@ -789,6 +815,7 @@ def daemon(port: int, no_server: bool, config_file: str | None, log_format: str 
         import yaml
         with open(config_file) as f:
             data = yaml.safe_load(f)
+        data = _interpolate_env(data) if data else data
         entries = (data.get("sources") or data.get("sync", [])) if data else []
     else:
         entries = _load_oikb_yaml()

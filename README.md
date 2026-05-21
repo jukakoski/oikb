@@ -170,6 +170,18 @@ Resolved in order (highest priority wins):
 2. **Environment variables** (`OPEN_WEBUI_URL`, `OPEN_WEBUI_API_KEY`)
 3. **Config file** (`~/.config/oikb/config.yaml`)
 
+All string values in `.oikb.yaml` support `${VAR}` and `${VAR:-default}` interpolation:
+
+```yaml
+sources:
+  - name: docs
+    source: github:${GITHUB_ORG}/docs
+    kb-id: ${KB_DOCS_ID}
+    token: ${GITHUB_TOKEN}
+    notify:
+      url: ${SLACK_WEBHOOK:-https://hooks.slack.com/default}
+```
+
 ## History
 
 ```bash
