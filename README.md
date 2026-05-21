@@ -13,18 +13,17 @@ pip install oikb
 export OPEN_WEBUI_URL=http://localhost:3000
 export OPEN_WEBUI_API_KEY=sk-your-api-key
 
-# Generate a config file
-oikb init
+# Sync a directory
+oikb sync ./docs --kb-id your-kb-id
 
-# Preview what would sync
-oikb sync --dry-run
+# Sync a GitHub repo
+oikb sync github:owner/repo --kb-id your-kb-id
 
-# Run the sync
-oikb sync
-
-# Or start the daemon for scheduled sync
-oikb daemon
+# Preview first (no upload)
+oikb sync ./docs --kb-id your-kb-id --dry-run
 ```
+
+For multi-source, scheduled sync, or daemon mode — run `oikb init` to generate a `.oikb.yaml` config file, then `oikb daemon`.
 
 ## Commands
 
