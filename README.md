@@ -44,7 +44,7 @@ oikb daemon --port 8080
 ```
 
 Features:
-- **Scheduled sync** — configurable per-source intervals (`30m`, `1h`, `6h`)
+- **Scheduled sync** — simple intervals (`30m`, `1h`) or cron expressions (`0 6 * * 1-5`)
 - **Webhooks** — instant sync on push via `/webhooks/github`, `/webhooks/gitlab`, `/webhooks/slack`, `/webhooks/confluence`
 - **Health checks** — `GET /health` for Docker/K8s readiness probes
 - **Prometheus metrics** — `GET /metrics` exports sync counters, duration histograms, and error rates
@@ -59,13 +59,13 @@ sources:
   - name: wiki
     source: github:owner/repo
     kb-id: 8f3a2b1c-...
-    interval: 1h
+    interval: 1h              # simple interval
     webhook: true
 
   - name: handbook
     source: confluence:ENG
     kb-id: 4e7d9a0f-...
-    interval: 6h
+    interval: "0 6 * * 1-5"   # cron: weekdays at 6am
 ```
 
 ```bash

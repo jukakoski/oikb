@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.7] - 2025-05-21
+
+### Added
+
+- Cron expression support for daemon scheduling — use `interval: "0 6 * * 1-5"` alongside simple intervals (`30m`, `1h`). Auto-detected, no config flag needed.
+- `croniter>=2.0` added as a core dependency.
+
 ## [0.2.6] - 2025-05-21
 
 ### Added

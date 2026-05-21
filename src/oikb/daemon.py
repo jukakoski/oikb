@@ -40,7 +40,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.2.6",
+    version="0.2.7",
 )
 
 # Runtime state populated by start_daemon().
@@ -50,7 +50,13 @@ _entries: list[dict] = []
 _shutdown_event: asyncio.Event | None = None
 
 
-# ── Interval parser ──────────────────────────────────────────────
+# ── Interval / cron parser ───────────────────────────────────────
+
+
+def _is_cron(value: str) -> bool:
+    """Check if a string looks like a cron expression (5-6 space-separated fields)."""
+    return isinstance(value, str) and len(value.strip().split()) >= 5
+
 
 def parse_interval(value: str | int) -> int:
     """Parse an interval string like '5m', '1h', '30s' to seconds."""
@@ -61,6 +67,18 @@ def parse_interval(value: str | int) -> int:
     if value[-1] in multipliers:
         return int(value[:-1]) * multipliers[value[-1]]
     return int(value)
+
+
+def _next_cron_delay(cron_expr: str) -> float:
+    """Compute seconds until the next cron fire time."""
+    from datetime import datetime
+
+    from croniter import croniter
+
+    now = datetime.now()
+    cron = croniter(cron_expr, now)
+    next_time = cron.get_next(datetime)
+    return max((next_time - now).total_seconds(), 1.0)
 
 
 # ── FastAPI routes ───────────────────────────────────────────────
@@ -231,23 +249,37 @@ async def _run_entry(entry: dict) -> None:
 
 
 async def _schedule_entry(entry: dict) -> None:
-    """Run sync for one .oikb.yaml entry on a loop."""
-    interval = parse_interval(entry.get("interval", "30m"))
-    source = entry.get("source", "unknown")
+    """Run sync for one .oikb.yaml entry on a loop.
 
-    log.info(f"Scheduling {source} every {interval}s")
+    Supports both simple intervals ('30m', '1h') and cron expressions
+    ('0 */6 * * *', '0 6 * * 1-5').
+    """
+    raw_interval = entry.get("interval", "30m")
+    source = entry.get("source", "unknown")
+    use_cron = _is_cron(str(raw_interval))
+
+    if use_cron:
+        log.info(f"Scheduling {source} with cron: {raw_interval}")
+    else:
+        interval = parse_interval(raw_interval)
+        log.info(f"Scheduling {source} every {interval}s")
 
     while not _shutdown_event.is_set():
         await _run_entry(entry)
 
-        # Calculate next sync time.
-        _scheduler_state.setdefault(source, {})["next_sync_in"] = f"{interval}s"
+        # Compute wait until next run.
+        if use_cron:
+            delay = _next_cron_delay(str(raw_interval))
+            _scheduler_state.setdefault(source, {})["next_sync_in"] = f"{int(delay)}s"
+        else:
+            delay = float(interval)
+            _scheduler_state.setdefault(source, {})["next_sync_in"] = f"{interval}s"
 
         try:
-            await asyncio.wait_for(_shutdown_event.wait(), timeout=interval)
+            await asyncio.wait_for(_shutdown_event.wait(), timeout=delay)
             break  # Shutdown requested.
         except asyncio.TimeoutError:
-            pass  # Interval elapsed, run again.
+            pass  # Time elapsed, run again.
 
 
 async def _run_scheduler(entries: list[dict]) -> None:
