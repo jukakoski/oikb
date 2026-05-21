@@ -40,7 +40,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.2.9",
+    version="0.3.0",
 )
 
 # Runtime state populated by start_daemon().
@@ -139,6 +139,46 @@ async def trigger_sync(identifier: str):
 
 # ── Scheduler ────────────────────────────────────────────────────
 
+
+async def _send_notification(entry: dict, payload: dict) -> None:
+    """Fire a webhook notification if configured on this entry."""
+    notify = entry.get("notify")
+    if not notify:
+        return
+
+    url = notify if isinstance(notify, str) else notify.get("url")
+    if not url:
+        return
+
+    trigger_on = notify.get("on", "error") if isinstance(notify, dict) else "error"
+    status = payload.get("status", "")
+
+    # Only fire if the trigger condition matches.
+    if trigger_on == "error" and status not in ("error", "partial"):
+        return
+
+    import httpx as _httpx
+
+    # Include a human-readable `text` field for Slack compatibility.
+    source = payload.get("source", "unknown")
+    if status == "error":
+        text = f"❌ oikb sync failed: {source}\n{payload.get('error', '')}"
+    elif status == "partial":
+        errors = payload.get("errors", [])
+        text = f"⚠️ oikb sync partial: {source} — {len(errors)} error(s)"
+    else:
+        text = f"✅ oikb sync OK: {source} — {payload.get('summary', '')}"
+
+    payload["text"] = text
+
+    try:
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+    except Exception as exc:
+        log.warning(f"Notification failed for {source}: {exc}")
+
+
 async def _run_entry(entry: dict) -> None:
     """Run a single sync for an entry."""
     from oikb.cli import _make_client, _resolve_connector
@@ -229,6 +269,18 @@ async def _run_entry(entry: dict) -> None:
             f"Synced {source} -> {kb_id}: {result.summary()} ({duration_ms}ms)"
         )
 
+        await _send_notification(entry, {
+            "source": source,
+            "kb_id": kb_id,
+            "status": status,
+            "duration_ms": duration_ms,
+            "summary": result.summary(),
+            "files_added": result.added,
+            "files_modified": result.modified,
+            "files_deleted": result.deleted,
+            "errors": result.errors or [],
+        })
+
     except Exception as e:
         _scheduler_state[source] = {
             "status": "error",
@@ -250,6 +302,13 @@ async def _run_entry(entry: dict) -> None:
                 error=str(e),
             )
         log.error(f"Sync failed for {source}: {e}")
+
+        await _send_notification(entry, {
+            "source": source,
+            "kb_id": kb_id,
+            "status": "error",
+            "error": str(e),
+        })
 
 
 async def _schedule_entry(entry: dict) -> None:

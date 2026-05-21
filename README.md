@@ -50,6 +50,7 @@ Features:
 - **Prometheus metrics** — `GET /metrics` exports sync counters, duration histograms, and error rates
 - **Sync history** — `GET /history` queryable log of all syncs
 - **On-demand sync** — `POST /sync/{identifier}` trigger by `name` or `kb-id`
+- **Failure notifications** — webhook POST on sync errors, compatible with Slack, PagerDuty, Opsgenie
 - **API key auth** — set `OIKB_API_KEY` to secure endpoints (Docker secrets `_FILE` supported)
 - **OpenAPI tool server** — add `http://oikb:8080` as a Tool Server in Open WebUI (Settings → Connections) and let the LLM trigger syncs, check status, and query history
 
@@ -61,6 +62,9 @@ sources:
     kb-id: 8f3a2b1c-...
     interval: 1h              # simple interval
     webhook: true
+    notify:
+      url: https://hooks.slack.com/services/T.../B.../xxx
+      on: error               # error (default) | always
 
   - name: handbook
     source: confluence:ENG

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2025-05-21
+
+### Added
+
+- Webhook failure notifications — `notify` key in `.oikb.yaml` entries POSTs a JSON payload to any HTTP endpoint on sync error. Includes a `text` field for native Slack incoming webhook compatibility. Supports `on: error` (default) or `on: always`.
+
 ## [0.2.9] - 2025-05-21
 
 ### Added
