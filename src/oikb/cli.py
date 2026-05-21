@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -760,12 +761,15 @@ def validate(config_file: str | None):
 @click.option("--port", default=8080, type=int, help="HTTP port for healthcheck and API (default: 8080).")
 @click.option("--no-server", is_flag=True, help="Run scheduler only, no HTTP server.")
 @click.option("--config", "config_file", default=None, type=click.Path(), help="Path to .oikb.yaml (default: ./.oikb.yaml).")
-def daemon(port: int, no_server: bool, config_file: str | None):
+@click.option("--log-format", default=None, type=click.Choice(["text", "json"]), help="Log output format (default: text, env: LOG_FORMAT).")
+def daemon(port: int, no_server: bool, config_file: str | None, log_format: str | None):
     """Run as a long-lived daemon with scheduled sync.
 
     Reads .oikb.yaml and syncs each source on its configured interval.
     Exposes /health, /history, and /sync endpoints.
     """
+    log_format = log_format or os.environ.get("LOG_FORMAT", "text")
+
     if config_file:
         import yaml
         with open(config_file) as f:
@@ -785,7 +789,7 @@ def daemon(port: int, no_server: bool, config_file: str | None):
             sys.exit(1)
 
     from oikb.daemon import start_daemon
-    start_daemon(entries=entries, port=port, no_server=no_server)
+    start_daemon(entries=entries, port=port, no_server=no_server, log_format=log_format)
 
 
 # ── history ─────────────────────────────────────────────────────

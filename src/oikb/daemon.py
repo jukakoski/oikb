@@ -40,7 +40,7 @@ async def verify_api_key(
 app = FastAPI(
     title="oikb",
     description="Sync engine for Open WebUI Knowledge Bases. Trigger syncs, check status, and query history.",
-    version="0.2.7",
+    version="0.2.8",
 )
 
 # Runtime state populated by start_daemon().
@@ -305,9 +305,14 @@ def start_daemon(
     entries: list[dict],
     port: int = 8080,
     no_server: bool = False,
+    log_format: str = "text",
 ) -> None:
     """Start the daemon with scheduler + optional HTTP server."""
     global _history, _entries
+
+    from oikb.logging import configure_logging
+    configure_logging(log_format=log_format)
+
     _entries = entries
     _history = SyncHistory()
     set_build_info(__version__)

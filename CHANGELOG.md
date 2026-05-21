@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.8] - 2025-05-21
+
+### Added
+
+- Structured JSON logging for the daemon — `oikb daemon --log-format json` or `LOG_FORMAT=json` env var. Outputs one JSON object per line with `ts`, `level`, `logger`, `msg`, and optional `source`/`kb_id`/`duration_ms` fields. Compatible with Datadog, Splunk, ELK, CloudWatch, and Loki.
+
 ## [0.2.7] - 2025-05-21
 
 ### Added
