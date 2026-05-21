@@ -47,20 +47,29 @@ Features:
 - **Webhooks** — instant sync on push via `/webhooks/github`, `/webhooks/gitlab`, `/webhooks/slack`, `/webhooks/confluence`
 - **Health checks** — `GET /health` for Docker/K8s readiness probes
 - **Sync history** — `GET /history` queryable log of all syncs
-- **On-demand sync** — `POST /sync/{source}` to trigger immediately
+- **On-demand sync** — `POST /sync/{identifier}` trigger by `name` or `kb-id`
+- **API key auth** — set `OIKB_API_KEY` to secure endpoints (Docker secrets `_FILE` supported)
 - **OpenAPI tool server** — add `http://oikb:8080` as a Tool Server in Open WebUI (Settings → Connections) and let the LLM trigger syncs, check status, and query history
 
 ```yaml
 # .oikb.yaml
 sources:
-  - source: github:owner/repo
-    kb-id: team-wiki
+  - name: wiki
+    source: github:owner/repo
+    kb-id: 8f3a2b1c-...
     interval: 1h
     webhook: true
 
-  - source: confluence:ENG
-    kb-id: handbook
+  - name: handbook
+    source: confluence:ENG
+    kb-id: 4e7d9a0f-...
     interval: 6h
+```
+
+```bash
+oikb sync --name wiki          # CLI: sync a specific entry
+curl -X POST /sync/wiki        # API: trigger by name
+curl -X POST /sync/8f3a2b1c-.. # API: trigger by kb-id
 ```
 
 ### Docker Compose
@@ -77,6 +86,7 @@ services:
     environment:
       - OPEN_WEBUI_URL=http://open-webui:8080
       - OPEN_WEBUI_API_KEY=${OPEN_WEBUI_API_KEY}
+      - OIKB_API_KEY=${OIKB_API_KEY}
     volumes:
       - ./.oikb.yaml:/app/.oikb.yaml:ro
     command: daemon
@@ -120,10 +130,12 @@ Route files from a single source to different Knowledge Bases by glob pattern:
 
 ```yaml
 sources:
-  - source: github:owner/repo
+  - name: wiki
+    source: github:owner/repo
+    kb-id: 8f3a2b1c-...
     routes:
-      "docs/**/*.md": docs-kb
-      "src/**": code-kb
+      "docs/**/*.md": docs-kb-id
+      "src/**": code-kb-id
 ```
 
 ## Selective Sync Filters
@@ -132,8 +144,9 @@ Narrow what gets synced with include/exclude globs:
 
 ```yaml
 sources:
-  - source: github:owner/repo
-    kb-id: docs-only
+  - name: docs
+    source: github:owner/repo
+    kb-id: 4e7d9a0f-...
     filter:
       include: ["docs/**/*.md", "*.txt"]
       exclude: ["drafts/**"]
