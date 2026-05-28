@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.6] - 2026-05-28
+
+### Added
+
+- **SharePoint**: certificate-based authentication via `SHAREPOINT_CERTIFICATE_PATH` env var — more secure alternative to client secret auth. Supports encrypted PEM keys with `SHAREPOINT_CERTIFICATE_PASSWORD`. Requires `pip install oikb[sharepoint-cert]`.
+
 ## [0.3.5] - 2025-05-21
 
 ### Added

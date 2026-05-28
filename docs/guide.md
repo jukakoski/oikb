@@ -21,6 +21,7 @@ A complete guide to syncing content into Open WebUI Knowledge Bases.
   - [GitLab / Bitbucket](#gitlab--bitbucket)
   - [Confluence](#confluence)
   - [Cloud Storage (S3 / GCS / Azure)](#cloud-storage-s3--gcs--azure)
+  - [SharePoint](#sharepoint)
   - [All Connectors](#all-connectors)
 - [Filtering](#filtering)
   - [Include / Exclude Globs](#include--exclude-globs)
@@ -257,6 +258,61 @@ oikb sync azure://container/prefix --kb-id your-kb-id
 ```
 
 Uses standard cloud SDK credentials (AWS profiles, service accounts, etc.).
+
+### SharePoint
+
+Sync a SharePoint document library:
+
+```bash
+oikb sync sharepoint:mysite.sharepoint.com --kb-id your-kb-id
+oikb sync sharepoint:mysite.sharepoint.com/Documents --kb-id your-kb-id
+```
+
+SharePoint supports two authentication methods:
+
+#### Client Secret (simpler setup)
+
+Set these environment variables:
+
+```bash
+export SHAREPOINT_TENANT_ID=your-tenant-id
+export SHAREPOINT_CLIENT_ID=your-client-id
+export SHAREPOINT_CLIENT_SECRET=your-client-secret
+```
+
+#### Certificate Auth (recommended for production)
+
+Certificate-based auth is more secure and follows Microsoft best practices for production environments.
+
+First install the required extras:
+
+```bash
+pip install oikb[sharepoint-cert]
+```
+
+Then set:
+
+```bash
+export SHAREPOINT_TENANT_ID=your-tenant-id
+export SHAREPOINT_CLIENT_ID=your-client-id
+export SHAREPOINT_CERTIFICATE_PATH=/path/to/cert.pem
+# Optional — only needed if the PEM key is encrypted:
+export SHAREPOINT_CERTIFICATE_PASSWORD=your-password
+```
+
+The PEM file must contain both the private key and the certificate. The connector extracts the thumbprint and signs a JWT assertion automatically.
+
+> **Note:** `SHAREPOINT_CLIENT_SECRET` and `SHAREPOINT_CERTIFICATE_PATH` are mutually exclusive — set one or the other.
+
+#### .oikb.yaml example
+
+```yaml
+sources:
+  - name: legal-docs
+    source: sharepoint:contoso.sharepoint.com/Legal
+    kb-id: abc123
+    interval: 1h
+```
 
 ### All Connectors
 
