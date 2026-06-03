@@ -71,7 +71,7 @@ class JiraConnector(BaseConnector):
                     break
 
             resp = self._http.get(
-                "/rest/api/3/search",
+                "/rest/api/3/search/jql",
                 params={"jql": self._jql, "startAt": start, "maxResults": max_results,
                         "fields": ",".join(api_fields)},
             )
