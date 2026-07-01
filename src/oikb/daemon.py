@@ -281,6 +281,7 @@ async def _run_entry_locked(entry: dict, dry_run: bool = False) -> dict | None:
             source,
             branch=entry.get("branch"),
             path=entry.get("path"),
+            options=entry,
         )
         client = _make_client(
             url=entry.get("url"),

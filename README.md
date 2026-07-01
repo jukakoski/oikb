@@ -82,6 +82,7 @@ sources:
   - name: handbook
     source: confluence:ENG
     kb-id: 4e7d9a0f-...
+    output_format: markdown
     interval: "0 6 * * 1-5"   # overrides default
 ```
 
@@ -155,6 +156,39 @@ oikb sync s3://bucket/prefix --kb-id your-kb-id
 oikb sync nextcloud:/Documents --kb-id your-kb-id
 oikb sync servicenow:incident --kb-id your-kb-id
 ```
+
+### Confluence
+
+```bash
+export CONFLUENCE_URL=https://company.atlassian.net
+export CONFLUENCE_USER=you@company.com
+export CONFLUENCE_TOKEN=your-api-token
+
+oikb sync confluence:ENG --kb-id your-kb-id
+```
+
+By default, Confluence pages are exported as plain text (`body-format=storage`) and uploaded as `.txt` files. For better page structure, enable Markdown in `.oikb.yaml`:
+
+```yaml
+sources:
+  - name: handbook
+    source: confluence:ENG
+    kb-id: 4e7d9a0f-...
+    output_format: markdown
+```
+
+With `output_format: markdown`, oikb fetches Confluence `export_view` by default and uploads `.md` files. You can override the Confluence body format when needed:
+
+```yaml
+sources:
+  - name: handbook
+    source: confluence:ENG
+    kb-id: 4e7d9a0f-...
+    output_format: markdown
+    body_format: view
+```
+
+Markdown is usually better for Knowledge Bases because it preserves headings, lists, links, and tables instead of flattening everything into stripped text. That extra structure gives Open WebUI cleaner chunks and more useful context during retrieval.
 
 Some connectors need an optional extra: `pip install oikb[gdrive]`, `pip install oikb[s3]`, or `pip install oikb[all]` for everything.
 

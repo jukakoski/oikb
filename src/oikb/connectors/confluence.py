@@ -1,6 +1,6 @@
 """Confluence connector — sync a Confluence space to a Knowledge Base.
 
-Uses the Confluence Cloud REST API v2. Pages are exported as plain text.
+Uses the Confluence Cloud REST API v2. Pages are exported as plain text or Markdown.
 Auth via CONFLUENCE_URL, CONFLUENCE_USER, CONFLUENCE_TOKEN env vars.
 """
 
@@ -17,6 +17,18 @@ import httpx
 from oikb.connectors import BaseConnector, ManifestEntry
 
 
+_OUTPUT_FORMATS = {"text", "markdown"}
+_BODY_FORMATS = {
+    "storage",
+    "atlas_doc_format",
+    "view",
+    "export_view",
+    "anonymous_export_view",
+    "styled_view",
+    "editor",
+}
+
+
 def _storage_to_text(storage_html: str) -> str:
     """Convert Confluence storage format (XHTML) to plain text."""
     # Strip all HTML tags.
@@ -24,6 +36,21 @@ def _storage_to_text(storage_html: str) -> str:
     text = html.unescape(text)
     # Collapse whitespace.
     text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _html_to_markdown(value: str) -> str:
+    """Convert Confluence-rendered HTML to Markdown."""
+    try:
+        from markdownify import markdownify as md
+    except ImportError as exc:
+        raise RuntimeError(
+            "Markdown output requires the 'markdownify' package. "
+            "Install it or use output_format='text'."
+        ) from exc
+
+    text = md(value, heading_style="ATX", bullets="-")
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return text
 
 
@@ -35,6 +62,9 @@ class ConfluenceConnector(BaseConnector):
         base_url:  Confluence instance URL (or CONFLUENCE_URL env var).
         user:      Confluence user email (or CONFLUENCE_USER env var).
         token:     Confluence API token (or CONFLUENCE_TOKEN env var).
+        output_format: Output format: "text" or "markdown". Defaults to "text".
+        body_format: Confluence body format. Defaults to "storage" for text and
+            "export_view" for markdown.
     """
 
     def __init__(
@@ -43,8 +73,25 @@ class ConfluenceConnector(BaseConnector):
         base_url: str | None = None,
         user: str | None = None,
         token: str | None = None,
+        output_format: str = "text",
+        body_format: str | None = None,
     ):
+        if output_format not in _OUTPUT_FORMATS:
+            raise ValueError(
+                f"Invalid output_format: {output_format}. "
+                f"Expected one of: {', '.join(sorted(_OUTPUT_FORMATS))}"
+            )
+        if body_format is None:
+            body_format = "export_view" if output_format == "markdown" else "storage"
+        if body_format not in _BODY_FORMATS:
+            raise ValueError(
+                f"Invalid body_format: {body_format}. "
+                f"Expected one of: {', '.join(sorted(_BODY_FORMATS))}"
+            )
+
         self.space_key = space_key
+        self.output_format = output_format
+        self.body_format = body_format
 
         self._base_url = (base_url or os.environ.get("CONFLUENCE_URL", "")).rstrip("/")
         self._user = user or os.environ.get("CONFLUENCE_USER", "")
@@ -99,7 +146,8 @@ class ConfluenceConnector(BaseConnector):
                 ).hexdigest()[:16]
 
                 # Sanitize title for filename.
-                filename = re.sub(r'[<>:"/\\|?*]', "_", title) + ".txt"
+                extension = ".md" if self.output_format == "markdown" else ".txt"
+                filename = re.sub(r'[<>:"/\\|?*]', "_", title) + extension
 
                 entries.append(
                     ManifestEntry(
@@ -134,13 +182,17 @@ class ConfluenceConnector(BaseConnector):
 
         resp = self._http.get(
             f"/api/v2/pages/{page_id}",
-            params={"body-format": "storage"},
+            params={"body-format": self.body_format},
         )
         resp.raise_for_status()
         data = resp.json()
 
-        storage = data.get("body", {}).get("storage", {}).get("value", "")
-        text = _storage_to_text(storage)
+        body = data.get("body", {})
+        value = body.get(self.body_format, {}).get("value", "")
+        if self.output_format == "markdown":
+            text = _html_to_markdown(value)
+        else:
+            text = _storage_to_text(value)
         return text.encode("utf-8")
 
     def close(self) -> None:
