@@ -43,8 +43,14 @@ def _make_client(url: str | None, token: str | None):
     )
 
 
-def _resolve_connector(source: str, branch: str | None = None, path: str | None = None):
+def _resolve_connector(
+    source: str,
+    branch: str | None = None,
+    path: str | None = None,
+    options: dict[str, Any] | None = None,
+):
     """Resolve a source string to the appropriate connector."""
+    options = options or {}
     if source.startswith("github:"):
         from oikb.connectors.github import GitHubConnector, parse_github_source
         parsed = parse_github_source(source)
@@ -83,7 +89,16 @@ def _resolve_connector(source: str, branch: str | None = None, path: str | None 
     if source.startswith("confluence:"):
         from oikb.connectors.confluence import ConfluenceConnector, parse_confluence_source
         parsed = parse_confluence_source(source)
-        return ConfluenceConnector(space_key=parsed["space_key"], base_url=parsed.get("base_url"))
+        connector_options = {
+            key: options[key]
+            for key in ("output_format", "body_format")
+            if key in options
+        }
+        return ConfluenceConnector(
+            space_key=parsed["space_key"],
+            base_url=parsed.get("base_url"),
+            **connector_options,
+        )
 
     if source.startswith("notion:"):
         from oikb.connectors.notion import NotionConnector, parse_notion_source
@@ -414,7 +429,12 @@ def sync(
                 continue
 
             try:
-                connector = _resolve_connector(entry_source, entry_branch, entry_path)
+                connector = _resolve_connector(
+                    entry_source,
+                    entry_branch,
+                    entry_path,
+                    options=entry,
+                )
                 client = _make_client(url, token)
 
                 if not quiet:
@@ -886,7 +906,7 @@ def validate(config_file: str | None, deep: bool):
 
         # Syntax check: resolve the connector.
         try:
-            _resolve_connector(source)
+            _resolve_connector(source, options=entry)
         except Exception as e:
             click.echo(click.style(f"  ✗ {entry_name}: {e}", fg="red"))
             has_errors = True
